@@ -198,6 +198,33 @@ html[data-texto="extra"] { font-size: 150%; }
 }
 @utility numeros { font-variant-numeric: tabular-nums; }
 
+/* Barras de rolagem no clima do app: finas, arredondadas, cor de borda */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
 @media print {
   @page { size: A4 portrait; margin: 12mm; }
   html, body { background: white !important; font-size: 100% !important; }

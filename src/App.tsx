@@ -7,6 +7,7 @@ import { Toaster } from '@/lib/toast'
 import { Button } from '@/ui/Button'
 import { Logo } from '@/ui/Logo'
 import Login from './Login'
+import NovaSenha from './NovaSenha'
 import LancarGasto from './telas/LancarGasto'
 import Lancamentos from './telas/Lancamentos'
 import Contas from './telas/Contas'
@@ -38,10 +39,11 @@ export default function App() {
   const [pronto, setPronto] = useState(false)
   const [vinculo, setVinculo] = useState<Vinculo | null>(null)
   const [semVinculo, setSemVinculo] = useState(false)
+  const [recuperando, setRecuperando] = useState(false) // chegou pelo link de "esqueci a senha"
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setPronto(true) })
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
+    const { data } = supabase.auth.onAuthStateChange((e, s) => { setSession(s); if (e === 'PASSWORD_RECOVERY') setRecuperando(true) })
     return () => data.subscription.unsubscribe()
   }, [])
 
@@ -65,6 +67,7 @@ export default function App() {
   let corpo
   if (!pronto) corpo = <div className="flex min-h-screen items-center justify-center text-corpo text-muted-foreground">Carregando…</div>
   else if (!session) corpo = <Login />
+  else if (recuperando) corpo = <NovaSenha onConcluir={() => setRecuperando(false)} />
   else if (semVinculo) {
     corpo = (
       <div className="flex min-h-screen flex-col items-center justify-center gap-5 px-4 text-center">

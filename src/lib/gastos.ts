@@ -57,8 +57,12 @@ export async function enviarAnexo(companyId: string, expenseId: string, f: File)
 }
 
 export async function abrirAnexo(a: Anexo) {
+  // abre a aba já no clique: no Safari/iPhone um window.open depois de aguardar a rede é bloqueado
+  const aba = window.open('', '_blank')
   const { data } = await supabase.storage.from(BUCKET).createSignedUrl(a.path, 120)
-  if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener')
+  if (data?.signedUrl && aba) { aba.opener = null; aba.location.href = data.signedUrl }
+  else if (data?.signedUrl) window.location.href = data.signedUrl
+  else aba?.close()
 }
 
 /** Apaga o registro primeiro: se falhar, nada mudou e o anexo continua abrindo. Só então remove o arquivo. */

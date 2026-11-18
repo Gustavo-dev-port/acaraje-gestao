@@ -19,6 +19,7 @@ export default function Faturamento() {
   const [desc, setDesc] = useState(0)
   const [pedidos, setPedidos] = useState('')
   const [erro, setErro] = useState('')
+  const [salvando, setSalvando] = useState(false)
   const [apagar, setApagar] = useState<string | null>(null)
   const hoje = hojeIso()
 
@@ -43,10 +44,13 @@ export default function Faturamento() {
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault()
+    if (salvando) return // duplo toque no celular não pode lançar duas vezes
     setErro('')
     if (bruto <= 0) return setErro('Digite o faturamento bruto do dia. Ex.: 2.500,00')
     if (desc > bruto) return setErro('O desconto não pode ser maior que o faturamento.')
+    setSalvando(true)
     const { error } = await supabase.from('revenues').insert({ company_id: companyId, date: data, gross_cents: bruto, discounts_cents: desc, orders: pedidos ? Number(pedidos) : null, origin: 'Manual' })
+    setSalvando(false)
     if (error) return setErro('Não consegui salvar. Tente de novo.')
     toast.ok('Faturamento lançado', { descricao: `${dataBR(data)} · ${reais(bruto - desc)}` })
     setBruto(0); setDesc(0); setPedidos('')
@@ -76,7 +80,7 @@ export default function Faturamento() {
       )}
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         <CartaoKpi rotulo="Faturamento líquido do mês" valor={reais(liquido)} destaque />
-        <CartaoKpi rotulo="Dias lançados" valor={linhas.length} />
+        <CartaoKpi rotulo="Dias lançados" valor={new Set(linhas.map((r) => r.date)).size} />
         <CartaoKpi rotulo="Ticket médio" valor={totalPedidos > 0 ? reais(Math.round(liquidoComPedidos / totalPedidos)) : '—'}>
           <p className="mt-2 text-legenda text-muted-foreground">{totalPedidos > 0 ? `${totalPedidos} pedidos em ${comPedidos.length} ${comPedidos.length === 1 ? 'dia' : 'dias'} com pedidos informados` : 'Informe os pedidos para ver'}</p>
         </CartaoKpi>
@@ -102,7 +106,7 @@ export default function Faturamento() {
           <div><Rotulo htmlFor="fp">Pedidos (opcional)</Rotulo><input id="fp" inputMode="numeric" value={pedidos} onChange={(e) => setPedidos(e.target.value.replace(/\D/g, '').slice(0, 5))} className={cn(campoCls, 'mt-2')} /></div>
         </div>
         {erro && <p role="alert" className="text-legenda font-semibold text-erro">{erro}</p>}
-        <Button type="submit" size="lg" className="w-full sm:w-auto"><Check className="!size-7" /> Lançar faturamento</Button>
+        <Button type="submit" size="lg" className="w-full sm:w-auto" disabled={salvando}><Check className="!size-7" /> {salvando ? 'Lançando…' : 'Lançar faturamento'}</Button>
       </form>
 
       <h2 className="mb-3 text-secao font-bold">Lançamentos do mês</h2>

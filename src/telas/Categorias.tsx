@@ -89,10 +89,12 @@ function FormCat({ inicial, meta, onFechar, onSalvo }: { inicial: Partial<Cat>; 
       if (error || !data) { setSalvando(false); return setErro('Não consegui salvar.') }
       id = data.id as string
     }
-    if (alvo > 0) await supabase.from('category_goals').upsert({ company_id: app.companyId, category_id: id!, monthly_limit_cents: alvo })
-    else await supabase.from('category_goals').delete().eq('category_id', id!)
+    const meta = alvo > 0
+      ? await supabase.from('category_goals').upsert({ company_id: app.companyId, category_id: id!, monthly_limit_cents: alvo })
+      : await supabase.from('category_goals').delete().eq('category_id', id!)
     await app.recarregar()
     setSalvando(false)
+    if (meta.error) { toast.erro('A categoria foi salva, mas não consegui salvar a meta.', 'Tente de novo.'); onSalvo(); return }
     toast.ok('Categoria salva'); onSalvo()
   }
 

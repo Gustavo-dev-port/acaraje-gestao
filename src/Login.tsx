@@ -21,9 +21,10 @@ export default function Login() {
     setMsg(null)
     if (esqueci) {
       if (!email.trim()) { setBusy(false); return setMsg({ texto: 'Digite o seu e-mail.', tipo: 'erro' }) }
-      await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin + '/' })
-      // mesma resposta exista ou não a conta, para não revelar quem tem acesso
-      setMsg({ texto: 'Se este e-mail tem acesso, enviamos um link para criar uma nova senha. Confira também o spam.', tipo: 'ok' })
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin + '/' })
+      // falha de verdade (limite de envios, sem internet): avisa. Conta que não existe responde igual a uma que existe, para não revelar quem tem acesso.
+      if (error && (error.status === 429 || error.status === 0 || /rate|fetch|network/i.test(error.message))) setMsg({ texto: 'Não consegui enviar agora. Espere alguns minutos e tente de novo.', tipo: 'erro' })
+      else setMsg({ texto: 'Se este e-mail tem acesso, enviamos um link para criar uma nova senha. Confira também o spam.', tipo: 'ok' })
     } else if (primeiro) {
       if (senha.length < 8) {
         setBusy(false)

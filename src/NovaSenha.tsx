@@ -39,6 +39,9 @@ export default function NovaSenha({ onConcluir }: { onConcluir: () => void }) {
         </div>
         {erro && <Aviso tipo="erro" className="py-3">{erro}</Aviso>}
         <Button type="submit" size="lg" className="w-full" disabled={busy}>{busy ? 'Aguarde…' : 'Salvar nova senha'}</Button>
+        <button type="button" className="mx-auto block h-12 text-legenda font-semibold text-primary underline underline-offset-4" onClick={async () => { try { sessionStorage.removeItem('ca-recuperando') } catch { /* sem armazenamento */ } await supabase.auth.signOut(); onConcluir() }}>
+          Cancelar e sair
+        </button>
       </form>
     </div>
   )

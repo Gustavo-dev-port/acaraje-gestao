@@ -48,6 +48,7 @@ function Painel({ aba }: { aba: 'mes' | 'ano' }) {
 
   useEffect(() => {
     let vivo = true
+    setCarregando(true) // ao trocar de ano, não mostra números do ano anterior como se fossem do novo
     Promise.all([
       // leitura paginada: o Supabase corta em 1.000 linhas e os totais ficariam errados sem aviso
       todasLinhas<G>((de, ate) => supabase.from('expenses').select('amount_cents,status,category_id,date,suppliers(nickname,trade_name,legal_name)').is('deleted_at', null).neq('status', 'AwaitingConfirmation').gte('date', `${anoRef - 1}-12-01`).lte('date', `${anoRef}-12-31`).order('id').range(de, ate) as unknown as PromiseLike<{ data: G[] | null; error: unknown }>),

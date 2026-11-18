@@ -53,7 +53,7 @@ export default function GastoEditor({ gasto, titulo = 'Editar gasto', onFechar, 
     setSalvando(true)
     const { error } = await supabase.from('expenses').update({
       amount_cents: valor, date: data, category_id: cat, supplier_id: fornId, payment_method: forma,
-      status: situacao, due_date: situacao === 'Paid' ? gasto.due_date : venc,
+      status: situacao, due_date: situacao === 'Paid' ? gasto.due_date : (venc || null),
       invoice_number: nota.trim() || null, notes: obs.trim() || null,
     }).eq('id', gasto.id)
     if (error) { setSalvando(false); return setErro('Não consegui salvar. Tente de novo.') }

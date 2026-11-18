@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, Pencil, PlusCircle, RotateCcw, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '@/supabase'
 import { cn } from '@/lib/cn'
@@ -36,7 +36,9 @@ export default function Lancamentos() {
   const [confirmar, setConfirmar] = useState<string[] | null>(null)
   const [editando, setEditando] = useState<Gasto | null>(null)
 
+  const seq = useRef(0)
   const carregar = useCallback(async () => {
+    const minha = ++seq.current // resposta de um mês/filtro anterior que chegar atrasada é ignorada
     try {
       const todas = await todasLinhas<Gasto>((de, ate) => {
         let q = supabase.from('expenses').select(GASTO_SEL)
@@ -49,8 +51,10 @@ export default function Lancamentos() {
         // 'id' desempata, para as páginas nunca repetirem nem pularem linhas
         return q.order('id').range(de, ate) as unknown as PromiseLike<{ data: Gasto[] | null; error: unknown }>
       })
+      if (minha !== seq.current) return
       setLinhas(todas)
     } catch {
+      if (minha !== seq.current) return
       toast.erro('Não consegui carregar os lançamentos.', 'Confira a internet e tente de novo.')
     }
     setCarregando(false)

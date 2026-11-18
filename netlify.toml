@@ -1,0 +1,10 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+  # URL e chave PUBLICÁVEL do Supabase: são públicas por desenho (vão dentro do site);
+  # quem protege os dados são o login e as regras de acesso do banco.
+  VITE_SUPABASE_URL = "https://sirhttnpwcoptezpxneb.supabase.co"
+  VITE_SUPABASE_KEY = "sb_publishable_UbOVpNpgKeT579o63MrG4w_Z92CSWMo"

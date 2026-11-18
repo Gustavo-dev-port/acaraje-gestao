@@ -48,7 +48,12 @@ export async function enviarAnexo(companyId: string, expenseId: string, f: File)
   const up = await supabase.storage.from(BUCKET).upload(path, f, { contentType: f.type || undefined })
   if (up.error) return false
   const ins = await supabase.from('attachments').insert({ company_id: companyId, expense_id: expenseId, path, kind: f.type === 'application/pdf' ? 'pdf' : 'image' })
-  return !ins.error
+  if (ins.error) {
+    // sem o registro no banco o arquivo ficaria órfão: remove o que acabou de subir
+    await supabase.storage.from(BUCKET).remove([path])
+    return false
+  }
+  return true
 }
 
 export async function abrirAnexo(a: Anexo) {
@@ -56,9 +61,12 @@ export async function abrirAnexo(a: Anexo) {
   if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener')
 }
 
-export async function removerAnexo(a: Anexo) {
-  await supabase.storage.from(BUCKET).remove([a.path])
-  await supabase.from('attachments').delete().eq('id', a.id)
+/** Apaga o registro primeiro: se falhar, nada mudou e o anexo continua abrindo. Só então remove o arquivo. */
+export async function removerAnexo(a: Anexo): Promise<boolean> {
+  const del = await supabase.from('attachments').delete().eq('id', a.id)
+  if (del.error) return false
+  await supabase.storage.from(BUCKET).remove([a.path]) // se falhar, sobra só um arquivo sem referência (inofensivo)
+  return true
 }
 
 // ---------- busca de CNPJ (BrasilAPI, base pública da Receita) ----------

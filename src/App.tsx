@@ -49,12 +49,15 @@ export default function App() {
   useEffect(() => {
     setVinculo(null); setSemVinculo(false)
     if (!userId) return
+    let vivo = true // numa troca rápida de conta, a resposta da sessão anterior é descartada
     supabase.from('company_members').select('role, companies(id, trade_name)').eq('user_id', userId).limit(1)
       .then(({ data, error }) => {
+        if (!vivo) return
         const row = data?.[0] as unknown as { role: Role; companies: { id: string; trade_name: string } } | undefined
         if (error || !row) return setSemVinculo(true)
         setVinculo({ companyId: row.companies.id, companyName: row.companies.trade_name, role: row.role })
       })
+    return () => { vivo = false }
   }, [userId])
 
   const base = useMemo(() => (vinculo && session ? { ...vinculo, userId: session.user.id, email: session.user.email ?? '' } : null), [vinculo, session])

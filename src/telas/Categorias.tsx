@@ -72,6 +72,8 @@ function FormCat({ inicial, meta, onFechar, onSalvo }: { inicial: Partial<Cat>; 
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const ehGrupo = !inicial.parent_id && !pai
+  // só há dois níveis: um grupo que já tem subcategorias não pode ir para dentro de outro grupo
+  const temFilhos = !!inicial.id && app.subsDe(inicial.id).length > 0
 
   async function salvar() {
     setErro('')
@@ -81,7 +83,7 @@ function FormCat({ inicial, meta, onFechar, onSalvo }: { inicial: Partial<Cat>; 
     let id = inicial.id
     if (id) {
       const { error } = await supabase.from('categories').update(payload).eq('id', id)
-      if (error) { setSalvando(false); return setErro('Não consegui salvar.') }
+      if (error) { setSalvando(false); return setErro(error.code === '23514' ? 'Só há dois níveis: grupo e detalhe. Essa mudança não é possível.' : 'Não consegui salvar.') }
     } else {
       const { data, error } = await supabase.from('categories').insert({ ...payload, company_id: app.companyId, sort_order: app.cats.length, icon: '', color: '#6B6B6B' }).select('id').single()
       if (error || !data) { setSalvando(false); return setErro('Não consegui salvar.') }
@@ -100,7 +102,7 @@ function FormCat({ inicial, meta, onFechar, onSalvo }: { inicial: Partial<Cat>; 
         <div><Rotulo htmlFor="c-nome">Nome</Rotulo><input id="c-nome" value={nome} onChange={(e) => setNome(e.target.value)} className={cn(campoCls, 'mt-2')} /></div>
         <div>
           <Rotulo htmlFor="c-pai">Fica dentro de</Rotulo>
-          <select id="c-pai" value={pai} onChange={(e) => setPai(e.target.value)} className={cn(campoCls, 'mt-2')}>
+          <select id="c-pai" value={pai} disabled={temFilhos} onChange={(e) => setPai(e.target.value)} className={cn(campoCls, 'mt-2')}>
             <option value="">— (é um grupo principal)</option>
             {app.grupos.filter((g) => g.id !== inicial.id).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>

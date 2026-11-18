@@ -5,6 +5,7 @@ import { cn } from '@/lib/cn'
 import { Link } from '@/lib/router'
 import { GRUPOS, nomeFornecedor, useApp } from '@/lib/ctx'
 import { dataBR, mesAnterior, mesAtual, MESES_CURTOS, nomeMesSo, reais, variacao } from '@/lib/fmt'
+import { todasLinhas } from '@/lib/paginar'
 import { AppShell } from '@/ui/AppShell'
 import { Button } from '@/ui/Button'
 import { BarrasHorizontais, BarrasMensais, Rosca, type Fatia } from '@/ui/graficos'
@@ -34,7 +35,7 @@ export default function Dashboard() {
 
 function Painel({ aba }: { aba: 'mes' | 'ano' }) {
   const app = useApp()
-  const { mes, setMes, companyId, pendentes, raizDe, catPorId, grupos } = app
+  const { mes, setMes, companyId, pendentes, raizDe, catPorId, grupos, catalogo } = app
   const atual = mesAtual()
   const [ano, setAno] = useState(Number(atual.slice(0, 4)))
   const anoRef = aba === 'ano' ? ano : Number(mes.slice(0, 4))
@@ -42,23 +43,26 @@ function Painel({ aba }: { aba: 'mes' | 'ano' }) {
   const [recs, setRecs] = useState<R[]>([])
   const [metas, setMetas] = useState<Record<string, number>>({})
   const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState(false)
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
     let vivo = true
     Promise.all([
-      supabase.from('expenses').select('amount_cents,status,category_id,date,suppliers(nickname,trade_name,legal_name)').is('deleted_at', null).neq('status', 'AwaitingConfirmation').gte('date', `${anoRef - 1}-12-01`).lte('date', `${anoRef}-12-31`),
-      supabase.from('revenues').select('date,gross_cents,discounts_cents').gte('date', `${anoRef - 1}-12-01`).lte('date', `${anoRef}-12-31`),
-      supabase.from('category_goals').select('category_id,monthly_limit_cents'),
+      // leitura paginada: o Supabase corta em 1.000 linhas e os totais ficariam errados sem aviso
+      todasLinhas<G>((de, ate) => supabase.from('expenses').select('amount_cents,status,category_id,date,suppliers(nickname,trade_name,legal_name)').is('deleted_at', null).neq('status', 'AwaitingConfirmation').gte('date', `${anoRef - 1}-12-01`).lte('date', `${anoRef}-12-31`).order('id').range(de, ate) as unknown as PromiseLike<{ data: G[] | null; error: unknown }>),
+      todasLinhas<R>((de, ate) => supabase.from('revenues').select('date,gross_cents,discounts_cents').gte('date', `${anoRef - 1}-12-01`).lte('date', `${anoRef}-12-31`).order('id').range(de, ate) as unknown as PromiseLike<{ data: R[] | null; error: unknown }>),
+      supabase.from('category_goals').select('category_id,monthly_limit_cents').then((m) => { if (m.error) throw m.error; return m.data as { category_id: string; monthly_limit_cents: number }[] }),
     ]).then(([g, r, m]) => {
       if (!vivo) return
-      setGastos((g.data as unknown as G[]) ?? [])
-      setRecs((r.data as R[]) ?? [])
+      setGastos(g)
+      setRecs(r)
       const mm: Record<string, number> = {}
-      for (const x of (m.data as { category_id: string; monthly_limit_cents: number }[]) ?? []) mm[x.category_id] = x.monthly_limit_cents
+      for (const x of m) mm[x.category_id] = x.monthly_limit_cents
       setMetas(mm)
+      setErro(false)
       setCarregando(false)
-    })
+    }).catch(() => { if (vivo) { setErro(true); setCarregando(false) } })
     return () => { vivo = false }
   }, [anoRef, tick])
 
@@ -83,7 +87,12 @@ function Painel({ aba }: { aba: 'mes' | 'ano' }) {
     return [...ord.slice(0, max - 1), { id: '_outros', nome: 'Outros', valor: resto, pct: (resto / total) * 100 }]
   }
 
-  if (carregando) return <p className="text-corpo text-muted-foreground">Carregando…</p>
+  // sem o catálogo de categorias completo, os gastos não podem ser agrupados: melhor esperar do que somar errado
+  if (erro || catalogo === 'erro') {
+    // nunca mostrar números parciais como se fossem o total
+    return <Aviso tipo="erro" acao={<Button variant="outline" onClick={() => { setCarregando(true); setTick((t) => t + 1); app.recarregar() }}>Tentar de novo</Button>}>Não consegui carregar os números. Confira a internet e tente de novo.</Aviso>
+  }
+  if (carregando || catalogo === 'carregando') return <p className="text-corpo text-muted-foreground">Carregando…</p>
 
   if (aba === 'mes') {
     const lista = doMes(mes)

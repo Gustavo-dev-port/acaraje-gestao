@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Trash2 } from 'lucide-react'
 import { supabase } from '@/supabase'
 import { cn } from '@/lib/cn'
@@ -7,7 +7,7 @@ import { useApp } from '@/lib/ctx'
 import { dataBR, fimMes, hojeIso, inicioMes, mesAtual, ontemIso, reais } from '@/lib/fmt'
 import { AppShell } from '@/ui/AppShell'
 import { Button } from '@/ui/Button'
-import { campoCls, CampoValor, CartaoKpi, Confirmacao, EstadoVazio, Rotulo, SeletorMes } from '@/ui/kit'
+import { Aviso, campoCls, CampoValor, CartaoKpi, Confirmacao, EstadoVazio, Rotulo, SeletorMes } from '@/ui/kit'
 
 interface Rev { id: string; date: string; gross_cents: number; discounts_cents: number; orders: number | null }
 
@@ -22,9 +22,15 @@ export default function Faturamento() {
   const [apagar, setApagar] = useState<string | null>(null)
   const hoje = hojeIso()
 
+  const seq = useRef(0)
+  const [erroCarga, setErroCarga] = useState(false)
   const carregar = useCallback(async () => {
-    const { data } = await supabase.from('revenues').select('id,date,gross_cents,discounts_cents,orders')
+    const minha = ++seq.current // resposta de um mês anterior que chegar atrasada é ignorada
+    const { data, error } = await supabase.from('revenues').select('id,date,gross_cents,discounts_cents,orders')
       .gte('date', inicioMes(mes)).lte('date', fimMes(mes)).order('date', { ascending: false })
+    if (minha !== seq.current) return
+    if (error) { setErroCarga(true); return }
+    setErroCarga(false)
     setLinhas((data as Rev[]) ?? [])
   }, [mes])
   useEffect(() => { carregar() }, [carregar])
@@ -53,18 +59,26 @@ export default function Faturamento() {
   }
 
   const liquido = linhas.reduce((s, r) => s + r.gross_cents - r.discounts_cents, 0)
-  const totalPedidos = linhas.reduce((s, r) => s + (r.orders ?? 0), 0)
+  // ticket médio: numerador e denominador só dos dias em que os pedidos foram informados
+  const comPedidos = linhas.filter((r) => (r.orders ?? 0) > 0)
+  const totalPedidos = comPedidos.reduce((s, r) => s + (r.orders ?? 0), 0)
+  const liquidoComPedidos = comPedidos.reduce((s, r) => s + r.gross_cents - r.discounts_cents, 0)
 
   return (
     <AppShell titulo="Faturamento" subtitulo="O que entrou no caixa, dia a dia.">
       <div className="mb-5 flex flex-wrap items-center gap-4">
         <SeletorMes mes={mes} onChange={setMes} max={mesAtual()} />
       </div>
+      {erroCarga && (
+        <Aviso tipo="erro" className="mb-6" acao={<Button variant="outline" onClick={() => carregar()}>Tentar de novo</Button>}>
+          Não consegui carregar o faturamento deste mês. Os valores abaixo podem estar desatualizados.
+        </Aviso>
+      )}
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         <CartaoKpi rotulo="Faturamento líquido do mês" valor={reais(liquido)} destaque />
         <CartaoKpi rotulo="Dias lançados" valor={linhas.length} />
-        <CartaoKpi rotulo="Ticket médio" valor={totalPedidos > 0 ? reais(Math.round(liquido / totalPedidos)) : '—'}>
-          <p className="mt-2 text-legenda text-muted-foreground">{totalPedidos > 0 ? `${totalPedidos} pedidos no mês` : 'Informe os pedidos para ver'}</p>
+        <CartaoKpi rotulo="Ticket médio" valor={totalPedidos > 0 ? reais(Math.round(liquidoComPedidos / totalPedidos)) : '—'}>
+          <p className="mt-2 text-legenda text-muted-foreground">{totalPedidos > 0 ? `${totalPedidos} pedidos em ${comPedidos.length} ${comPedidos.length === 1 ? 'dia' : 'dias'} com pedidos informados` : 'Informe os pedidos para ver'}</p>
         </CartaoKpi>
       </div>
 

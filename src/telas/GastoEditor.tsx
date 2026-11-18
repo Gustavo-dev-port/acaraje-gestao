@@ -4,7 +4,7 @@ import { supabase } from '@/supabase'
 import { cn } from '@/lib/cn'
 import { toast } from '@/lib/toast'
 import { nomeFornecedor, useApp } from '@/lib/ctx'
-import { abrirAnexo, enviarAnexo, FORMAS, listarAnexos, removerAnexo, type Anexo, type Gasto } from '@/lib/gastos'
+import { abrirAnexo, enviarAnexo, FORMAS, listarAnexos, removerAnexo, rotuloForma, type Anexo, type Gasto } from '@/lib/gastos'
 import { Button } from '@/ui/Button'
 import { campoCls, CampoValor, Chip, Janela, Rotulo } from '@/ui/kit'
 
@@ -33,7 +33,8 @@ export default function GastoEditor({ gasto, titulo = 'Editar gasto', onFechar, 
   const [cat, setCat] = useState(gasto.category_id)
   const [fornId, setFornId] = useState(gasto.supplier_id)
   const [forma, setForma] = useState(gasto.payment_method)
-  const [pago, setPago] = useState(gasto.status === 'Paid')
+  // a situação só muda se a pessoa mudar de propósito (editar a nota não "confirma" uma conta)
+  const [situacao, setSituacao] = useState(gasto.status)
   const [venc, setVenc] = useState(gasto.due_date ?? gasto.date)
   const [nota, setNota] = useState(gasto.invoice_number ?? '')
   const [obs, setObs] = useState(gasto.notes ?? '')
@@ -52,7 +53,7 @@ export default function GastoEditor({ gasto, titulo = 'Editar gasto', onFechar, 
     setSalvando(true)
     const { error } = await supabase.from('expenses').update({
       amount_cents: valor, date: data, category_id: cat, supplier_id: fornId, payment_method: forma,
-      status: pago ? 'Paid' : 'Pending', due_date: pago ? null : venc,
+      status: situacao, due_date: situacao === 'Paid' ? gasto.due_date : venc,
       invoice_number: nota.trim() || null, notes: obs.trim() || null,
     }).eq('id', gasto.id)
     if (error) { setSalvando(false); return setErro('Não consegui salvar. Tente de novo.') }
@@ -90,10 +91,13 @@ export default function GastoEditor({ gasto, titulo = 'Editar gasto', onFechar, 
         <fieldset>
           <legend className="text-rotulo font-semibold">Situação</legend>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Chip ativo={pago} onClick={() => setPago(true)}>Já paguei</Chip>
-            <Chip ativo={!pago} onClick={() => setPago(false)}>Ainda não paguei</Chip>
+            <Chip ativo={situacao === 'Paid'} onClick={() => setSituacao('Paid')}>Já paguei</Chip>
+            <Chip ativo={situacao === 'Pending'} onClick={() => setSituacao('Pending')}>Ainda não paguei</Chip>
+            {gasto.status === 'AwaitingConfirmation' && (
+              <Chip ativo={situacao === 'AwaitingConfirmation'} onClick={() => setSituacao('AwaitingConfirmation')}>Valor a confirmar</Chip>
+            )}
           </div>
-          {!pago && (
+          {situacao !== 'Paid' && (
             <div className="mt-3 max-w-[16rem]">
               <Rotulo htmlFor="ed-venc">Vencimento</Rotulo>
               <input id="ed-venc" type="date" value={venc} onChange={(e) => setVenc(e.target.value)} className={cn(campoCls, 'mt-2')} />
@@ -103,7 +107,9 @@ export default function GastoEditor({ gasto, titulo = 'Editar gasto', onFechar, 
         <fieldset>
           <legend className="text-rotulo font-semibold">Como pagou</legend>
           <div className="mt-2 flex flex-wrap gap-2">
-            {FORMAS.map((f) => <Chip key={f.valor} ativo={forma === f.valor} onClick={() => setForma(forma === f.valor ? null : f.valor)}>{f.rotulo}</Chip>)}
+            {/* mantém a forma antiga já gravada (Cartão, Transferência) como opção, para não perdê-la ao editar */}
+            {[...FORMAS, ...(gasto.payment_method && !FORMAS.some((f) => f.valor === gasto.payment_method) ? [{ valor: gasto.payment_method, rotulo: rotuloForma(gasto.payment_method) }] : [])]
+              .map((f) => <Chip key={f.valor} ativo={forma === f.valor} onClick={() => setForma(forma === f.valor ? null : f.valor)}>{f.rotulo}</Chip>)}
           </div>
         </fieldset>
         <div className="grid gap-5 sm:grid-cols-2">
@@ -125,7 +131,7 @@ export default function GastoEditor({ gasto, titulo = 'Editar gasto', onFechar, 
                   <button type="button" className="flex h-12 items-center gap-2 text-corpo font-semibold text-primary underline underline-offset-4" onClick={() => abrirAnexo(a)}>
                     <ExternalLink className="size-5" aria-hidden /> {a.kind === 'pdf' ? 'Abrir PDF' : 'Abrir imagem'}
                   </button>
-                  <Button variant="ghost" size="icon" aria-label="Remover anexo" className="text-erro" onClick={async () => { if (confirm('Remover este anexo?')) { await removerAnexo(a); setAnexos((l) => l.filter((x) => x.id !== a.id)) } }}><Trash2 /></Button>
+                  <Button variant="ghost" size="icon" aria-label="Remover anexo" className="text-erro" onClick={async () => { if (confirm('Remover este anexo?')) { if (await removerAnexo(a)) setAnexos((l) => l.filter((x) => x.id !== a.id)); else toast.erro('Não consegui remover o anexo.', 'Só dono e sócio removem anexos.') } }}><Trash2 /></Button>
                 </li>
               ))}
             </ul>

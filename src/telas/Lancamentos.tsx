@@ -7,6 +7,7 @@ import { toast } from '@/lib/toast'
 import { nomeFornecedor, useApp } from '@/lib/ctx'
 import { dataBR, fimMes, inicioMes, mesAtual, reais } from '@/lib/fmt'
 import { FORMAS, GASTO_SEL, rotuloForma, type Gasto } from '@/lib/gastos'
+import { todasLinhas } from '@/lib/paginar'
 import { AppShell } from '@/ui/AppShell'
 import { Button } from '@/ui/Button'
 import { IconeCategoria } from '@/ui/icones'
@@ -28,22 +29,30 @@ export default function Lancamentos() {
   const [fCat, setFCat] = useState(TODOS)
   const [fForn, setFForn] = useState(TODOS)
   const [fForma, setFForma] = useState(TODOS)
+  // formas antigas (Cartão, Transferência) só aparecem no filtro se existirem nos lançamentos
+  const formasNoFiltro = [...FORMAS, ...['Card', 'Transfer'].filter((v) => linhas.some((l) => l.payment_method === v)).map((v) => ({ valor: v, rotulo: rotuloForma(v) }))]
   const [sel, setSel] = useState<string[]>([])
   const [lixeira, setLixeira] = useState(false)
   const [confirmar, setConfirmar] = useState<string[] | null>(null)
   const [editando, setEditando] = useState<Gasto | null>(null)
 
   const carregar = useCallback(async () => {
-    let q = supabase.from('expenses').select(GASTO_SEL)
-    if (lixeira) {
-      const limite = new Date(Date.now() - 30 * 864e5).toISOString()
-      q = q.not('deleted_at', 'is', null).gte('deleted_at', limite).order('deleted_at', { ascending: false })
-    } else {
-      q = q.is('deleted_at', null).gte('date', inicioMes(mes)).lte('date', fimMes(mes)).order('date', { ascending: false }).order('created_at', { ascending: false })
+    try {
+      const todas = await todasLinhas<Gasto>((de, ate) => {
+        let q = supabase.from('expenses').select(GASTO_SEL)
+        if (lixeira) {
+          const limite = new Date(Date.now() - 30 * 864e5).toISOString()
+          q = q.not('deleted_at', 'is', null).gte('deleted_at', limite).order('deleted_at', { ascending: false })
+        } else {
+          q = q.is('deleted_at', null).gte('date', inicioMes(mes)).lte('date', fimMes(mes)).order('date', { ascending: false }).order('created_at', { ascending: false })
+        }
+        // 'id' desempata, para as páginas nunca repetirem nem pularem linhas
+        return q.order('id').range(de, ate) as unknown as PromiseLike<{ data: Gasto[] | null; error: unknown }>
+      })
+      setLinhas(todas)
+    } catch {
+      toast.erro('Não consegui carregar os lançamentos.', 'Confira a internet e tente de novo.')
     }
-    const { data, error } = await q
-    if (error) toast.erro('Não consegui carregar os lançamentos.')
-    else setLinhas((data as unknown as Gasto[]) ?? [])
     setCarregando(false)
   }, [mes, lixeira])
 
@@ -68,7 +77,10 @@ export default function Lancamentos() {
 
   const contam = lista.filter((l) => l.status !== 'AwaitingConfirmation')
   const total = contam.reduce((s, l) => s + l.amount_cents, 0)
-  const tudoSel = lista.length > 0 && sel.length === lista.length
+  // as ações em lote valem só para o que está visível: filtros e busca nunca deixam gastos escondidos na seleção
+  const visiveis = new Set(lista.map((l) => l.id))
+  const selVisiveis = sel.filter((id) => visiveis.has(id))
+  const tudoSel = lista.length > 0 && selVisiveis.length === lista.length
   const temFiltro = !!busca || fCat !== TODOS || fForn !== TODOS || fForma !== TODOS
   const limparFiltros = () => { setBusca(''); setFCat(TODOS); setFForn(TODOS); setFForma(TODOS) }
 
@@ -96,7 +108,7 @@ export default function Lancamentos() {
   }
 
   async function mudarCategoria(cat: string) {
-    const { error } = await supabase.from('expenses').update({ category_id: cat }).in('id', sel)
+    const { error } = await supabase.from('expenses').update({ category_id: cat }).in('id', selVisiveis)
     if (error) return toast.erro('Não consegui trocar a categoria.')
     toast.ok('Categoria trocada'); setSel([]); carregar()
   }
@@ -140,17 +152,17 @@ export default function Lancamentos() {
           </select>
           <select value={fForma} onChange={(e) => setFForma(e.target.value)} aria-label="Forma de pagamento" className={cn(filtroCls, fForma !== TODOS && 'border-laranja bg-mostarda/15')}>
             <option value={TODOS}>Qualquer pagamento</option>
-            {FORMAS.map((f) => <option key={f.valor} value={f.valor}>{f.rotulo}</option>)}
+            {formasNoFiltro.map((f) => <option key={f.valor} value={f.valor}>{f.rotulo}</option>)}
           </select>
           {temFiltro && <Button variant="link" onClick={limparFiltros}>Limpar filtros</Button>}
         </div>
       )}
 
-      {sel.length > 0 && !lixeira && (
+      {selVisiveis.length > 0 && !lixeira && (
         <div className="sticky top-20 z-10 mb-3 flex flex-wrap items-center gap-3 rounded-cartao bg-preto px-5 py-3 text-farinha shadow-lg lg:top-2">
-          <b className="text-corpo">{sel.length} selecionado{sel.length > 1 && 's'}</b>
+          <b className="text-corpo">{selVisiveis.length} selecionado{selVisiveis.length > 1 && 's'}</b>
           <div className="min-w-[14rem]"><SelectCategoria valor="" onChange={(v) => v && mudarCategoria(v)} className="h-12 border-2 text-legenda text-foreground" /></div>
-          {podeEditar && <Button variant="destructive" onClick={() => setConfirmar(sel)}><Trash2 /> Excluir</Button>}
+          {podeEditar && <Button variant="destructive" onClick={() => setConfirmar(selVisiveis)}><Trash2 /> Excluir</Button>}
           <Button variant="ghost" className="text-farinha hover:bg-farinha/15" onClick={() => setSel([])}>Cancelar</Button>
         </div>
       )}

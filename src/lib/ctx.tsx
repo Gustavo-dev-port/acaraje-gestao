@@ -55,6 +55,8 @@ interface Ctx {
   iconeDoGasto: (catId: string) => IconeKey
   corDoGrupo: (catId: string) => number
   sups: Sup[]
+  /** situação do catálogo de categorias: relatórios só podem somar depois que ele chegou inteiro */
+  catalogo: 'carregando' | 'ok' | 'erro'
   recarregar: () => Promise<void>
   mes: string
   setMes: (m: string) => void
@@ -73,6 +75,7 @@ export function AppProvider({ base, children }: {
   children: ReactNode
 }) {
   const [cats, setCats] = useState<Cat[]>([])
+  const [catalogo, setCatalogo] = useState<'carregando' | 'ok' | 'erro'>('carregando')
   const [sups, setSups] = useState<Sup[]>([])
   const [mes, setMes] = useState(mesAtualFn())
   const [pendentes, setPendentes] = useState(0)
@@ -82,7 +85,8 @@ export function AppProvider({ base, children }: {
       supabase.from('categories').select('id,name,parent_id,cost_group,icon,color,active,sort_order').order('sort_order'),
       supabase.from('suppliers').select('id,cnpj,legal_name,trade_name,nickname,default_category_id,is_complete'),
     ])
-    setCats((c.data as Cat[]) ?? [])
+    if (c.error) setCatalogo('erro')
+    else { setCats((c.data as Cat[]) ?? []); setCatalogo('ok') }
     const lista = ((s.data as Sup[]) ?? []).sort((a, b) => nomeFornecedor(a).localeCompare(nomeFornecedor(b), 'pt-BR'))
     setSups(lista)
   }, [])
@@ -94,8 +98,8 @@ export function AppProvider({ base, children }: {
   }, [])
 
   useEffect(() => {
-    // garante que as contas fixas do mês já estão lançadas, depois carrega tudo
-    supabase.rpc('generate_recurrences', { p_company: base.companyId, p_month: hojeIso() }).then(() => contarPendentes())
+    // garante que as contas fixas já estão lançadas (inclusive de meses em que ninguém abriu o app), depois carrega tudo
+    supabase.rpc('generate_recurrences_range', { p_company: base.companyId, p_until: hojeIso() }).then(() => contarPendentes())
     recarregar()
   }, [base.companyId, recarregar, contarPendentes])
 
@@ -120,9 +124,9 @@ export function AppProvider({ base, children }: {
       raizDe,
       iconeDoGasto: (id) => iconeDe(raizDe(id)?.name ?? ''),
       corDoGrupo: (id) => { const r = raizDe(id); return r ? (grupos.indexOf(r) % 5) + 1 : 6 },
-      sups, recarregar, mes, setMes, pendentes,
+      sups, catalogo, recarregar, mes, setMes, pendentes,
     }
-  }, [base, cats, sups, recarregar, mes, pendentes])
+  }, [base, cats, catalogo, sups, recarregar, mes, pendentes])
 
   return <C.Provider value={value}>{children}</C.Provider>
 }

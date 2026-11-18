@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BadgeCheck, CircleAlert, MinusCircle, Pencil, Plus, Search, Trash2, Loader2 } from 'lucide-react'
 import { supabase } from '@/supabase'
 import { cn } from '@/lib/cn'
@@ -6,6 +6,7 @@ import { toast } from '@/lib/toast'
 import { nomeFornecedor, useApp } from '@/lib/ctx'
 import { mascararCnpj, reais } from '@/lib/fmt'
 import { buscarCnpj } from '@/lib/gastos'
+import { todasLinhas } from '@/lib/paginar'
 import { AppShell } from '@/ui/AppShell'
 import { Button } from '@/ui/Button'
 import { IconeCategoria } from '@/ui/icones'
@@ -35,14 +36,18 @@ export default function Fornecedores() {
   const ano = new Date().getFullYear()
 
   const carregar = useCallback(async () => {
-    const [s, g] = await Promise.all([
-      supabase.from('suppliers').select('id,cnpj,legal_name,trade_name,nickname,registration_status,default_category_id,is_complete'),
-      supabase.from('expenses').select('supplier_id,amount_cents').is('deleted_at', null).neq('status', 'AwaitingConfirmation').gte('date', `${ano}-01-01`).lte('date', `${ano}-12-31`),
-    ])
-    setLista(((s.data as Forn[]) ?? []).sort((a, b) => nomeFornecedor(a).localeCompare(nomeFornecedor(b), 'pt-BR')))
-    const m = new Map<string, number>()
-    for (const r of (g.data as { supplier_id: string; amount_cents: number }[]) ?? []) m.set(r.supplier_id, (m.get(r.supplier_id) ?? 0) + r.amount_cents)
-    setGasto(m)
+    try {
+      const [s, g] = await Promise.all([
+        supabase.from('suppliers').select('id,cnpj,legal_name,trade_name,nickname,registration_status,default_category_id,is_complete').then((r) => { if (r.error) throw r.error; return r.data as Forn[] }),
+        todasLinhas<{ supplier_id: string; amount_cents: number }>((de, ate) => supabase.from('expenses').select('supplier_id,amount_cents').is('deleted_at', null).neq('status', 'AwaitingConfirmation').gte('date', `${ano}-01-01`).lte('date', `${ano}-12-31`).order('id').range(de, ate)),
+      ])
+      setLista([...s].sort((a, b) => nomeFornecedor(a).localeCompare(nomeFornecedor(b), 'pt-BR')))
+      const m = new Map<string, number>()
+      for (const r of g) m.set(r.supplier_id, (m.get(r.supplier_id) ?? 0) + r.amount_cents)
+      setGasto(m)
+    } catch {
+      toast.erro('Não consegui carregar os fornecedores.', 'Confira a internet e tente de novo.')
+    }
   }, [ano])
   useEffect(() => { carregar() }, [carregar])
 
@@ -99,19 +104,24 @@ function FormForn({ inicial, companyId, onFechar, onSalvo }: { inicial: Partial<
   const [razao, setRazao] = useState(inicial.legal_name ?? '')
   const [cnpj, setCnpj] = useState(inicial.cnpj ? mascararCnpj(inicial.cnpj) : '')
   const [cat, setCat] = useState(inicial.default_category_id ?? '')
-  const [extra, setExtra] = useState<{ cnae?: string; situacao?: string; cidade?: string; uf?: string; endereco?: string; fantasia?: string }>({})
+  // dados da Receita ficam presos ao CNPJ que foi consultado (campo `cnpj`): se o número mudar, não valem mais
+  const [extra, setExtra] = useState<{ cnpj: string; cnae: string; situacao: string; cidade: string; uf: string; endereco: string; fantasia: string } | null>(null)
   const [buscando, setBuscando] = useState(false)
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const digitos = cnpj.replace(/\D/g, '')
+  const digitosAtual = useRef(digitos)
+  digitosAtual.current = digitos
 
   async function consultar() {
+    const alvo = digitos
     setBuscando(true); setErro('')
-    const d = await buscarCnpj(digitos)
+    const d = await buscarCnpj(alvo)
     setBuscando(false)
+    if (digitosAtual.current !== alvo) return // a pessoa trocou o CNPJ durante a busca: descarta a resposta
     if (!d) return setErro('Não encontrei esse CNPJ agora. Confira o número ou preencha à mão.')
     setRazao(d.razao); if (!apelido.trim()) setApelido(d.fantasia || d.razao)
-    setExtra({ cnae: d.cnae, situacao: d.situacao, cidade: d.cidade, uf: d.uf, endereco: d.endereco, fantasia: d.fantasia })
+    setExtra({ cnpj: alvo, cnae: d.cnae, situacao: d.situacao, cidade: d.cidade, uf: d.uf, endereco: d.endereco, fantasia: d.fantasia })
     toast.ok('Dados preenchidos pela Receita', { descricao: d.razao })
   }
 
@@ -123,7 +133,14 @@ function FormForn({ inicial, companyId, onFechar, onSalvo }: { inicial: Partial<
     const payload: Record<string, unknown> = {
       nickname: apelido.trim() || null, legal_name: razao.trim() || null, cnpj: digitos || null, default_category_id: cat || null, is_complete: true,
     }
-    if (extra.situacao) Object.assign(payload, { registration_status: extra.situacao, cnae: extra.cnae, city: extra.cidade, state: extra.uf, address: extra.endereco, trade_name: extra.fantasia || null })
+    const consultado = extra && extra.cnpj === digitos ? extra : null
+    const original = (inicial.cnpj ?? '').replace(/\D/g, '')
+    if (consultado) {
+      Object.assign(payload, { registration_status: consultado.situacao, cnae: consultado.cnae, city: consultado.cidade, state: consultado.uf, address: consultado.endereco, trade_name: consultado.fantasia || null })
+    } else if (inicial.id && digitos !== original) {
+      // o CNPJ mudou sem nova consulta: apaga os dados que eram do número antigo
+      Object.assign(payload, { registration_status: null, cnae: null, city: null, state: null, address: null, trade_name: null })
+    }
     const r = inicial.id ? await supabase.from('suppliers').update(payload).eq('id', inicial.id) : await supabase.from('suppliers').insert({ ...payload, company_id: companyId })
     setSalvando(false)
     if (r.error) return setErro(r.error.code === '23505' ? 'Já existe um fornecedor com esse CNPJ.' : 'Não consegui salvar.')

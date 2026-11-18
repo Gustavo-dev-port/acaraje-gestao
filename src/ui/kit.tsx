@@ -137,17 +137,37 @@ export function Janela({ titulo, onFechar, children, lado, largura = '34rem' }: 
   titulo: string; onFechar: () => void; children: ReactNode; lado?: boolean; largura?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  // o pai costuma criar uma função nova a cada digitação; guardá-la numa ref evita
+  // reexecutar o efeito (que roubava o foco do campo que a pessoa estava preenchendo)
+  const fecharRef = useRef(onFechar)
+  fecharRef.current = onFechar
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onFechar()
+    const anterior = document.activeElement as HTMLElement | null
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && fecharRef.current()
     window.addEventListener('keydown', onKey)
-    const antes = document.body.style.overflow
+    const overflowAntes = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    ref.current?.focus()
-    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = antes }
-  }, [onFechar])
+    // foca a janela só se nenhum campo dentro dela já tiver pedido o foco (autoFocus)
+    if (ref.current && !ref.current.contains(document.activeElement)) ref.current.focus()
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = overflowAntes
+      anterior?.focus?.()
+    }
+  }, [])
+  // Tab não sai da janela: do último campo volta ao primeiro (e Shift+Tab ao contrário)
+  const prenderFoco = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Tab' || !ref.current) return
+    const itens = Array.from(ref.current.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'))
+      .filter((el) => el.offsetParent !== null)
+    if (itens.length === 0) { e.preventDefault(); return }
+    const primeiro = itens[0], ultimo = itens[itens.length - 1]
+    if (e.shiftKey && (document.activeElement === primeiro || document.activeElement === ref.current)) { e.preventDefault(); ultimo.focus() }
+    else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primeiro.focus() }
+  }
   return (
     <div className="no-print fixed inset-0 z-50 flex bg-preto/55" onMouseDown={(e) => e.target === e.currentTarget && onFechar()}>
-      <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label={titulo} style={{ maxWidth: largura }}
+      <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label={titulo} onKeyDown={prenderFoco} style={{ maxWidth: largura }}
         className={cn('relative w-full overflow-y-auto bg-card p-6 shadow-2xl outline-none sm:p-8',
           lado ? 'ml-auto h-full' : 'm-auto max-h-[94vh] rounded-cartao')}>
         <div className="mb-5 flex items-start justify-between gap-3">

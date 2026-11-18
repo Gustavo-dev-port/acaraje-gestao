@@ -42,6 +42,8 @@ export default function LancarGasto() {
   const refForn = useRef<HTMLInputElement>(null)
   const refValor = useRef<HTMLInputElement>(null)
   const refFoto = useRef<HTMLInputElement>(null)
+  const travaRef = useRef(false)
+  const criadoRef = useRef<{ nome: string; id: string } | null>(null) // fornecedor criado numa tentativa que não terminou
 
   const hoje = hojeIso()
   const ontem = ontemIso()
@@ -102,11 +104,19 @@ export default function LancarGasto() {
   const limpar = () => {
     setData(hojeIso()); setTexto(''); setForn(null); setBusca('idle'); setAchado(null); setGrupoId(null); setSubId(null)
     setSugerida(false); setValor(0); setDetalhes(false); setForma(null); setNota(''); setVencimento(''); setFotos([])
-    setErros({}); setDuplicado(false)
+    if (refFoto.current) refFoto.current.value = ''
+    setErros({}); setDuplicado(false); criadoRef.current = null
     setTimeout(() => refForn.current?.focus(), 0)
   }
 
+  // trava de duplo clique: a ref muda na hora (o estado `salvando` só muda no próximo desenho)
   async function salvar(modo: 'novo' | 'ver', ignorarDuplicado = false) {
+    if (travaRef.current) return
+    travaRef.current = true
+    try { await salvarGasto(modo, ignorarDuplicado) } finally { travaRef.current = false }
+  }
+
+  async function salvarGasto(modo: 'novo' | 'ver', ignorarDuplicado: boolean) {
     if (salvando) return
     const nome = (forn ? nomeFornecedor(forn) : texto).trim()
     const e: typeof erros = {}
@@ -119,10 +129,18 @@ export default function LancarGasto() {
     setSalvando(true)
     let fid = forn?.id
     if (!fid) {
-      const { data: novo, error } = await supabase.from('suppliers')
-        .insert({ company_id: companyId, nickname: nome, is_complete: false, default_category_id: subId ?? grupoId }).select('id').single()
-      if (error || !novo) { setSalvando(false); return toast.erro('Não consegui cadastrar o fornecedor.') }
-      fid = novo.id as string
+      // mesmo nome digitado já cadastrado (ou criado numa tentativa anterior que falhou): reaproveita, não duplica
+      const nomeMin = nome.toLowerCase()
+      const existente = sups.find((s) => nomeFornecedor(s).trim().toLowerCase() === nomeMin)
+      if (existente) fid = existente.id
+      else if (criadoRef.current?.nome === nomeMin) fid = criadoRef.current.id
+      else {
+        const { data: novo, error } = await supabase.from('suppliers')
+          .insert({ company_id: companyId, nickname: nome, is_complete: false, default_category_id: subId ?? grupoId }).select('id').single()
+        if (error || !novo) { setSalvando(false); return toast.erro('Não consegui cadastrar o fornecedor.') }
+        fid = novo.id as string
+        criadoRef.current = { nome: nomeMin, id: fid }
+      }
     }
     if (!ignorarDuplicado) {
       const { count } = await supabase.from('expenses').select('id', { count: 'exact', head: true })
@@ -169,6 +187,8 @@ export default function LancarGasto() {
     setForn(f); setTexto(f ? nomeFornecedor(f) : nomeFornecedor(l.suppliers))
     escolherCategoria(l.category_id); setSugerida(false)
     setValor(l.amount_cents); setForma(l.payment_method); setData(hojeIso()); setErros({})
+    // repetir copia só fornecedor, tipo, valor e pagamento: vencimento, nota, fotos e aviso de duplicidade começam limpos
+    setVencimento(''); setNota(''); setFotos([]); setDuplicado(false); criadoRef.current = null
     setTimeout(() => refValor.current?.focus(), 0)
   }
 

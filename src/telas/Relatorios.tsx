@@ -6,7 +6,8 @@ import { GRUPOS, useApp } from '@/lib/ctx'
 import { fimMes, inicioMes, mesAtual, nomeMes, reais } from '@/lib/fmt'
 import { AppShell } from '@/ui/AppShell'
 import { Button } from '@/ui/Button'
-import { SeletorMes } from '@/ui/kit'
+import { Aviso, SeletorMes } from '@/ui/kit'
+import { todasLinhas } from '@/lib/paginar'
 
 interface G { amount_cents: number; category_id: string; status: string }
 interface R { gross_cents: number; discounts_cents: number; orders: number | null }
@@ -14,19 +15,22 @@ interface R { gross_cents: number; discounts_cents: number; orders: number | nul
 const pct = (v: number, base: number) => (base > 0 ? `${((v / base) * 100).toFixed(1).replace('.', ',')}%` : '—')
 
 export default function Relatorios() {
-  const { mes, setMes, catPorId, raizDe } = useApp()
+  const { mes, setMes, catPorId, raizDe, catalogo, recarregar } = useApp()
   const [gastos, setGastos] = useState<G[] | null>(null)
   const [recs, setRecs] = useState<R[]>([])
+  const [erro, setErro] = useState(false)
+  const [tentativa, setTentativa] = useState(0)
 
   useEffect(() => {
     let vivo = true
-    setGastos(null)
+    setGastos(null); setErro(false)
     Promise.all([
-      supabase.from('expenses').select('amount_cents,category_id,status').is('deleted_at', null).neq('status', 'AwaitingConfirmation').gte('date', inicioMes(mes)).lte('date', fimMes(mes)),
-      supabase.from('revenues').select('gross_cents,discounts_cents,orders').gte('date', inicioMes(mes)).lte('date', fimMes(mes)),
-    ]).then(([g, r]) => { if (vivo) { setGastos((g.data as G[]) ?? []); setRecs((r.data as R[]) ?? []) } })
+      todasLinhas<G>((de, ate) => supabase.from('expenses').select('amount_cents,category_id,status').is('deleted_at', null).neq('status', 'AwaitingConfirmation').gte('date', inicioMes(mes)).lte('date', fimMes(mes)).order('id').range(de, ate) as unknown as PromiseLike<{ data: G[] | null; error: unknown }>),
+      todasLinhas<R>((de, ate) => supabase.from('revenues').select('gross_cents,discounts_cents,orders').gte('date', inicioMes(mes)).lte('date', fimMes(mes)).order('id').range(de, ate) as unknown as PromiseLike<{ data: R[] | null; error: unknown }>),
+    ]).then(([g, r]) => { if (vivo) { setGastos(g); setRecs(r) } })
+      .catch(() => { if (vivo) setErro(true) }) // sem dados completos, nada de DRE nem exportação
     return () => { vivo = false }
-  }, [mes])
+  }, [mes, tentativa])
 
   const dre = useMemo(() => {
     const lista = gastos ?? []
@@ -50,13 +54,15 @@ export default function Relatorios() {
 
   function exportarCsv() {
     const q = (s: string) => `"${s.replace(/"/g, '""')}"`
+    // texto vindo de cadastros não pode virar fórmula na planilha: prefixa com apóstrofo
+    const txt = (s: string) => (/^[=+\-@\t\r]/.test(s) ? `'${s}` : s)
     const n = (c: number) => (c / 100).toFixed(2).replace('.', ',')
     const linhas: (string | number)[][] = [
       ['Linha', 'Valor (R$)'],
       ['Faturamento bruto', n(dre.bruto)], ['Descontos', n(-dre.desc)], ['Faturamento líquido', n(dre.liquido)],
       ['CMV', n(-dre.cmv)], ['Lucro bruto', n(dre.lucroBruto)], ['Despesas fixas', n(-dre.fixo)],
       ['Despesas variáveis', n(-dre.variavel)], ['Impostos', n(-dre.imposto)], ['Resultado', n(dre.resultado)],
-      [], ['Grupo', 'Categoria', 'Tipo de custo', 'Gasto (R$)'], ...porCategoria.map((r) => [r.grupo, r.nome, r.tipo, n(r.v)]),
+      [], ['Grupo', 'Categoria', 'Tipo de custo', 'Gasto (R$)'], ...porCategoria.map((r) => [txt(r.grupo), txt(r.nome), txt(r.tipo), n(r.v)]),
     ]
     const csv = '﻿' + linhas.map((l) => l.map((c) => q(String(c))).join(';')).join('\r\n')
     const a = document.createElement('a')
@@ -76,10 +82,14 @@ export default function Relatorios() {
 
   return (
     <AppShell titulo="Relatórios" subtitulo="O resultado do mês (DRE) e os gastos por categoria."
-      acoes={gastos ? <><Button variant="outline" onClick={() => window.print()}><Printer /> Imprimir / PDF</Button><Button variant="outline" onClick={exportarCsv}><Download /> Planilha (CSV)</Button></> : undefined}>
+      acoes={gastos && catalogo === 'ok' ? <><Button variant="outline" onClick={() => window.print()}><Printer /> Imprimir / PDF</Button><Button variant="outline" onClick={exportarCsv}><Download /> Planilha (CSV)</Button></> : undefined}>
       <div className="no-print mb-6"><SeletorMes mes={mes} onChange={setMes} max={mesAtual()} /></div>
       <h2 className="mb-4 hidden font-display text-secao font-semibold print:block">Cantinho do Acarajé — {nomeMes(mes)}</h2>
-      {!gastos ? <p className="text-corpo text-muted-foreground">Carregando…</p> : (
+      {erro || catalogo === 'erro' ? (
+        <Aviso tipo="erro" acao={<Button variant="outline" onClick={() => { setTentativa((t) => t + 1); recarregar() }}>Tentar de novo</Button>}>
+          Não consegui carregar o relatório deste mês. Por segurança, não mostro números incompletos.
+        </Aviso>
+      ) : !gastos || catalogo === 'carregando' ? <p className="text-corpo text-muted-foreground">Carregando…</p> : (
         <div className="space-y-8">
           <section aria-labelledby="dre-t">
             <h2 id="dre-t" className="mb-3 text-secao font-bold">Resultado do mês</h2>

@@ -94,9 +94,11 @@ function Insumos({ ings, ultimo, podeEditar, recarregar }: { ings: Ing[]; ultimo
 
   async function salvarIng() {
     if (!nome.trim()) return setErro('Dê um nome ao insumo.')
+    // com preço registrado, mudar a unidade reinterpretaria o custo (kg → g multiplicaria por mil)
+    if (edit?.id && edit.unit && un !== edit.unit && ultimo.has(edit.id)) return setErro(`Este insumo já tem preços em ${edit.unit}. Para trocar a unidade, cadastre um novo insumo.`)
     const payload = { name: nome.trim(), unit: un, active: ativo }
     const r = edit?.id ? await supabase.from('ingredients').update(payload).eq('id', edit.id) : await supabase.from('ingredients').insert({ ...payload, company_id: app.companyId })
-    if (r.error) return setErro('Não consegui salvar.')
+    if (r.error) return setErro(r.error.code === '23514' ? 'Este insumo já está em fichas ou tem preços: a unidade não pode mudar.' : 'Não consegui salvar.')
     setEdit(null); toast.ok('Insumo salvo'); recarregar()
   }
   async function salvarPreco() {
@@ -174,29 +176,27 @@ function Lista({ prods, itens, ings, custoDe, podeEditar, recarregar }: {
 
   const abrir = (p: Partial<Prod>) => { setErro(''); setEdit(p); setVenda(p.sale_price_cents ?? 0); setLista(p.id ? (itens[p.id] ?? []).map((x) => ({ ...x })) : []) }
   const custo = custoDe(lista)
-  const cmv = venda > 0 ? (custo.total / venda) * 100 : null
-  const sugerido = edit?.target_cmv && custo.total > 0 ? Math.round(custo.total / (edit.target_cmv / 100)) : null
+  // com insumo sem preço ou com unidade incompatível o custo está incompleto: nada de CMV, lucro ou sugestão
+  const completo = custo.faltam === 0
+  const cmv = venda > 0 && completo ? (custo.total / venda) * 100 : null
+  const sugerido = edit?.target_cmv && custo.total > 0 && completo ? Math.round(custo.total / (edit.target_cmv / 100)) : null
   const acima = cmv != null && edit?.target_cmv != null && cmv > edit.target_cmv
 
   async function salvar() {
     if (!edit) return
     if (!(edit.name ?? '').trim()) return setErro('Dê um nome à ficha.')
     if (lista.some((i) => !i.ingredient_id || !(i.quantity > 0))) return setErro('Complete os ingredientes (insumo e quantidade).')
-    const payload = { name: edit.name!.trim(), kind: edit.kind ?? 'cozinha', menu_category: edit.menu_category?.trim() || null, sale_price_cents: venda || null, target_cmv: edit.target_cmv ?? null, instructions: edit.instructions?.trim() || null, active: edit.active ?? true }
-    let id = edit.id
-    if (id) {
-      const { error } = await supabase.from('products').update({ ...payload, version: (edit.version ?? 1) + 1 }).eq('id', id)
-      if (error) return setErro('Não consegui salvar.')
-      await supabase.from('recipe_items').delete().eq('product_id', id)
-    } else {
-      const { data, error } = await supabase.from('products').insert({ ...payload, company_id: app.companyId }).select('id').single()
-      if (error || !data) return setErro('Não consegui salvar.')
-      id = data.id as string
+    for (const i of lista) {
+      const ing = ings.find((g) => g.id === i.ingredient_id)
+      if (ing && converter(i.quantity, i.unit, ing.unit) == null) return setErro(`“${ing.name}” é comprado em ${ing.unit}; use ${ing.unit === 'un' ? 'un' : ing.unit === 'kg' || ing.unit === 'g' ? 'kg ou g' : 'l ou ml'} na quantidade.`)
     }
-    if (lista.length) {
-      const { error } = await supabase.from('recipe_items').insert(lista.map((i) => ({ company_id: app.companyId, product_id: id!, ingredient_id: i.ingredient_id, quantity: i.quantity, unit: i.unit })))
-      if (error) return setErro('A ficha foi salva, mas os ingredientes não. Tente de novo.')
-    }
+    // produto e ingredientes gravados juntos no banco: ou entra tudo, ou nada muda
+    const { error } = await supabase.rpc('save_recipe', {
+      p_company: app.companyId, p_id: edit.id ?? null,
+      p_product: { name: edit.name!.trim(), kind: edit.kind ?? 'cozinha', menu_category: edit.menu_category?.trim() ?? '', sale_price_cents: venda ? String(venda) : '', target_cmv: edit.target_cmv == null ? '' : String(edit.target_cmv), instructions: edit.instructions?.trim() ?? '', active: edit.active ?? true },
+      p_items: lista.map((i) => ({ ingredient_id: i.ingredient_id, quantity: i.quantity, unit: i.unit })),
+    })
+    if (error) return setErro('Não consegui salvar a ficha. Nada foi alterado, tente de novo.')
     setEdit(null); toast.ok('Ficha salva'); recarregar()
   }
 
@@ -207,7 +207,7 @@ function Lista({ prods, itens, ings, custoDe, podeEditar, recarregar }: {
         <ul className="overflow-hidden rounded-cartao border border-border bg-card shadow-suave">
           {prods.map((p, k) => {
             const c = custoDe(itens[p.id] ?? [])
-            const m = p.sale_price_cents ? (c.total / p.sale_price_cents) * 100 : null
+            const m = p.sale_price_cents && c.faltam === 0 ? (c.total / p.sale_price_cents) * 100 : null
             const sobe = m != null && p.target_cmv != null && m > p.target_cmv
             return (
               <li key={p.id} className={cn('flex min-h-[4.5rem] flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3', k % 2 === 1 && 'bg-zebra')}>
@@ -250,7 +250,7 @@ function Lista({ prods, itens, ings, custoDe, podeEditar, recarregar }: {
             </div>
             <div className="space-y-1 rounded-campo border-2 border-dashed border-mostarda/70 bg-zebra p-4 text-corpo">
               <p>Custo do prato: <b className="numeros">{reais(Math.round(custo.total))}</b></p>
-              <p>CMV: <b className={cn('numeros', acima && 'text-erro')}>{pctTxt(cmv)}</b>{venda > 0 && <> · lucro por prato: <b className="numeros">{reais(Math.round(venda - custo.total))}</b></>}</p>
+              <p>CMV: <b className={cn('numeros', acima && 'text-erro')}>{pctTxt(cmv)}</b>{venda > 0 && completo && <> · lucro por prato: <b className="numeros">{reais(Math.round(venda - custo.total))}</b></>}</p>
               {sugerido != null && <p>Preço sugerido para CMV de {edit.target_cmv}%: <b className="numeros">{reais(sugerido)}</b></p>}
               {custo.faltam > 0 && <p className="font-semibold text-erro">Falta preço ou unidade compatível em {custo.faltam} ingrediente(s).</p>}
             </div>

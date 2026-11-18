@@ -4,6 +4,9 @@ import { Button } from '@/ui/Button'
 import { Logo } from '@/ui/Logo'
 import { Aviso, campoCls, Rotulo } from '@/ui/kit'
 
+// dica para o gerenciador de senhas do navegador
+const DICA_SENHA = { novo: 'new-password', atual: 'current-password' }
+
 export default function Login() {
   const [primeiro, setPrimeiro] = useState(false) // primeiro acesso: criar a senha
   const [email, setEmail] = useState('')
@@ -47,7 +50,7 @@ export default function Login() {
         </div>
         <div>
           <Rotulo htmlFor="senha">{primeiro ? 'Crie uma senha' : 'Senha'}</Rotulo>
-          <input id="senha" type="password" autoComplete={primeiro ? 'new-password' : 'current-password'} required value={senha} onChange={(e) => setSenha(e.target.value)} className={`${campoCls} mt-2`} />
+          <input id="senha" type="password" autoComplete={DICA_SENHA[primeiro ? 'novo' : 'atual']} required value={senha} onChange={(e) => setSenha(e.target.value)} className={`${campoCls} mt-2`} />
         </div>
         {msg && <Aviso tipo={msg.tipo === 'erro' ? 'erro' : 'ok'} className="py-3">{msg.texto}</Aviso>}
         <Button type="submit" size="lg" className="w-full" disabled={busy}>{busy ? 'Aguarde…' : primeiro ? 'Criar acesso' : 'Entrar'}</Button>

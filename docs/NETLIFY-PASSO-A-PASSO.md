@@ -4,21 +4,18 @@ Site: **cantinho-acaraje-gestao** → https://cantinho-acaraje-gestao.netlify.ap
 
 Os nomes dos menus do Netlify mudam de vez em quando. Se algo não estiver exatamente onde está escrito, procure pelo nome da opção em negrito.
 
-## Parte 1: tirar a trava de login do site (resolve o erro 401)
+## Parte 1: conferir que o site está público
 
-O site foi criado com uma proteção que pede login do Netlify para quem abre. Para a equipe usar, ela precisa sair.
+O painel do Netlify mudou: hoje ele tem a tela **Manage** com cartões.
 
-1. Entre em https://app.netlify.com e faça login.
-2. Na tela inicial (**Projects**), clique no site **cantinho-acaraje-gestao**.
-3. No menu da esquerda, clique em **Project configuration** (em algumas versões aparece como **Site configuration**).
-4. Dentro dele, clique em **Access & security** (ou **Access control**).
-5. Procure a seção **Visitor access**. Ela diz algo como "Netlify Authentication" ou "Password protection" ou "Team login".
-6. Escolha **None** / **Public** / **Disable** (a opção que deixa qualquer pessoa abrir o endereço) e **salve**.
-7. Abra https://cantinho-acaraje-gestao.netlify.app numa aba anônima. Deve aparecer a tela de login do app. Se ainda der 401, espere 1 minuto e recarregue com Ctrl+F5.
+1. Entre em https://app.netlify.com e abra o site **cantinho-acaraje-gestao**.
+2. Clique em **Manage** (topo).
+3. No cartão **Who can see it** deve estar escrito **Public · anyone can visit**. Se estiver outra coisa, clique no cartão e escolha a opção pública.
+4. Teste o endereço numa aba anônima: deve aparecer a tela de login do app.
 
-Importante: o app em si continua protegido, pois só entra quem tem conta e convite. A trava do Netlify é desnecessária.
+(O selo "private" ao lado do endereço, na pré-visualização do painel, é só do painel e pode ser ignorado.)
 
-Se não achar a opção: ela pode exigir plano pago em alguns tipos de conta. Nesse caso me diga o que aparece na tela de **Access & security**.
+Outros cartões úteis: **Versions and previews** (publicações automáticas pelo GitHub) e **Keys and secrets** (vazio é o esperado; a chave pública do Supabase está no `netlify.toml`).
 
 ## Parte 2: configurar o login no Supabase
 
@@ -56,7 +53,7 @@ O site é publicado a partir do GitHub (repositório `Gustavo-dev-port/acaraje-g
 
 | Sintoma | O que fazer |
 |---|---|
-| 401 ao abrir o site | Parte 1 não foi concluída. |
+| 401 ao abrir o site | Confira o cartão **Who can see it** (Parte 1). |
 | E-mail de confirmação leva a uma página que não abre | A *Site URL* do Supabase ainda está errada (Parte 2, passo 3). |
 | "Cadastro só com convite" | O dono precisa convidar esse e-mail na tela **Equipe**. |
 | Tela em branco após publicar | No Netlify, **Deploys** → abra o último e leia o log; mande a mensagem de erro. |

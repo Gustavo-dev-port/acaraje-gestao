@@ -99,9 +99,14 @@ export function AppProvider({ base, children }: {
 
   useEffect(() => {
     // garante que as contas fixas já estão lançadas (inclusive de meses em que ninguém abriu o app), depois carrega tudo
-    supabase.rpc('generate_recurrences_range', { p_company: base.companyId, p_until: hojeIso() }).then(() => contarPendentes())
+    // O banco também gera todo dia (migration 20261119101000); aqui só dono/sócio, para o cargo de confiança não escrever ao abrir.
+    if (base.role === 'dono' || base.role === 'socio') {
+      supabase.rpc('generate_recurrences_range', { p_company: base.companyId, p_until: hojeIso() }).then(() => contarPendentes())
+    } else {
+      contarPendentes()
+    }
     recarregar()
-  }, [base.companyId, recarregar, contarPendentes])
+  }, [base.companyId, base.role, recarregar, contarPendentes])
 
   useEffect(() => {
     const ch = supabase.channel('app-' + base.companyId)

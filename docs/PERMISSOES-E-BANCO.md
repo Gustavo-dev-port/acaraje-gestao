@@ -56,6 +56,7 @@ Leitura: qualquer membro. Escrita:
 | `generate_recurrences` / `generate_recurrences_range` | Cria as contas fixas do mês (ou de um período) sem duplicar (índice único `ux_expenses_recurrence_month`). |
 | `save_recipe` | Salva uma ficha técnica inteira de uma vez (tudo ou nada). |
 | `accept_invites` | Vincula quem entrou à empresa conforme o convite. |
+| `set_expenses_status` | Confirma (ou desfaz a confirmação de) várias contas de uma vez, com status e valor de cada uma, numa só transação: todas mudam ou nenhuma. Usada pela tela Contas. **Pendente de aplicação**, veja abaixo. |
 
 Outros gatilhos de integridade: `guard_ingredient_unit` (impede trocar a unidade de um insumo já usado) e `guard_category_depth` (categoria só tem 2 níveis).
 
@@ -71,7 +72,20 @@ Estão **só no Supabase** (não há arquivo `.sql` de cada uma no repositório)
 6. `20261118172500` auditoria_seguranca_banco: campos imutáveis, limites do bucket, convite só após confirmar e-mail, revoga `anon`.
 7. `20261118173331` auditoria_integridade_dados: `save_recipe`, unidade, profundidade de categoria, contas fixas por período.
 
-O arquivo `supabase/migrations/20261112000000_gestao_core.sql` é só o rascunho inicial e **está desatualizado**. A fonte de verdade é o banco. Para ver o que está valendo: Supabase → *Database → Migrations*, ou a consulta `select * from supabase_migrations.schema_migrations;`.
+### Migração escrita, ainda NÃO aplicada
+
+8. `20261119000000` set_expenses_status_atomic (arquivo `supabase/migrations/20261119000000_set_expenses_status_atomic.sql`): cria `set_expenses_status` (`security invoker`, só para `authenticated`).
+
+**Aplique antes de publicar o site.** A tela Contas já chama essa função; sem ela, "Confirmar todas" e "Desfazer" falham (nada é gravado pela metade). Como aplicar com segurança:
+
+1. Aplique primeiro num branch do Supabase ou projeto de teste, não direto na produção.
+2. Teste com os três cargos: confirmar uma conta, várias contas e o Desfazer. Os gatilhos `guard_soft_delete` e `guard_immutable` não estão no repositório e podem barrar a troca de `status` ou `amount_cents`. Se barrarem, o erro volta e nada é gravado.
+3. Rode *Advisors* e confira que `anon` não consegue executar a função.
+4. Depois de aplicada, troque "Pendente de aplicação" por "aplicada" nesta página e remova o aviso.
+
+As migrações 1 a 7 foram exportadas do banco em 19/11/2026 para `supabase/migrations/` (arquivos `20261118…`), com o mesmo texto que o banco guarda (conferido por MD5). A fonte de verdade continua sendo o banco: Supabase → *Database → Migrations*, ou `select * from supabase_migrations.schema_migrations;`.
+
+O rascunho antigo `20261112000000_gestao_core.sql` foi removido em 19/11/2026, porque repetia a migração `20261118011945_gestao_core.sql` e quebraria um `supabase db push` ou uma recriação do banco a partir dos arquivos.
 
 ## Como mudar o banco com segurança
 
@@ -85,5 +99,5 @@ O arquivo `supabase/migrations/20261112000000_gestao_core.sql` é só o rascunho
 - Histórico de alterações (auditoria) dos lançamentos.
 - Índices de chaves estrangeiras e unificação de regras repetidas (desempenho, só importa com muito dado).
 - Testes automáticos das regras por cargo.
-- Confirmar vários gastos de uma vez não é transacional (se cair no meio, parte fica confirmada).
+- Confirmar vários gastos de uma vez: a correção (`set_expenses_status`) está escrita, mas ainda não foi aplicada no banco.
 - Telas "Importar extrato" e "Estoque" ainda aparecem como "Em breve".

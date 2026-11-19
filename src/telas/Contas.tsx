@@ -10,6 +10,7 @@ import { AppShell } from '@/ui/AppShell'
 import { Button } from '@/ui/Button'
 import { IconeCategoria } from '@/ui/icones'
 import { Aviso, campoCls, CampoValor, Janela, Rotulo, EstadoVazio } from '@/ui/kit'
+import { LIMITE } from '@/lib/validar'
 import { SelectCategoria } from './GastoEditor'
 
 interface Rec {
@@ -71,14 +72,15 @@ export default function Contas() {
     const alvos = linhas.filter((g) => ids.includes(g.id))
     // guarda a situação e o valor de antes, para o "Desfazer" devolver exatamente o que era
     const antes = alvos.map((g) => ({ id: g.id, status: g.status, amount_cents: g.amount_cents }))
-    const resultados = await Promise.all(alvos.map((g) => supabase.from('expenses').update({ status: 'Paid', amount_cents: valorDe(g) }).eq('id', g.id)))
-    if (resultados.some((r) => r.error)) { carregar(); return toast.erro('Não consegui confirmar tudo.', 'Confira a lista e tente de novo.') }
+    // uma única chamada no banco: todas as contas mudam juntas ou nenhuma muda
+    const { error: erroLote } = await supabase.rpc('set_expenses_status', { p_items: alvos.map((g) => ({ id: g.id, status: 'Paid', amount_cents: valorDe(g) })) })
+    if (erroLote) { carregar(); return toast.erro('Não confirmei nenhuma conta.', 'Nada foi alterado. Confira a lista e tente de novo.') }
     setValores({})
     toast.ok(ids.length > 1 ? `${ids.length} contas confirmadas!` : `${nomeFornecedor(alvos[0]?.suppliers)} confirmada`, {
       descricao: ids.length > 1 ? 'Elas já contam nos lançamentos do mês.' : reais(valorDe(alvos[0])),
       acao: { rotulo: 'Desfazer', fn: async () => {
-        const volta = await Promise.all(antes.map((a) => supabase.from('expenses').update({ status: a.status, amount_cents: a.amount_cents }).eq('id', a.id)))
-        if (volta.some((r) => r.error)) toast.erro('Não consegui desfazer tudo.', 'Confira a lista.'); else toast.ok('Confirmação desfeita.')
+        const { error: erroVolta } = await supabase.rpc('set_expenses_status', { p_items: antes })
+        if (erroVolta) toast.erro('Não consegui desfazer.', 'Nada foi alterado. Confira a lista.'); else toast.ok('Confirmação desfeita.')
         carregar()
       } },
     })
@@ -243,7 +245,7 @@ function FormConta({ inicial, onFechar, onSalvo }: { inicial: Partial<Rec>; onFe
       <div className="space-y-5">
         <div>
           <Rotulo htmlFor="nc-nome">Nome da conta</Rotulo>
-          <input id="nc-nome" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Seguro do bar" className={cn(campoCls, 'mt-2')} />
+          <input id="nc-nome" maxLength={LIMITE.nome} value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Seguro do bar" className={cn(campoCls, 'mt-2')} />
         </div>
         <div>
           <Rotulo htmlFor="nc-forn">Para quem você paga</Rotulo>
@@ -252,7 +254,7 @@ function FormConta({ inicial, onFechar, onSalvo }: { inicial: Partial<Rec>; onFe
             {app.sups.map((s) => <option key={s.id} value={s.id}>{nomeFornecedor(s)}</option>)}
             <option value="_novo">➕ Novo fornecedor…</option>
           </select>
-          {fornId === '_novo' && <input value={novoForn} onChange={(e) => setNovoForn(e.target.value)} placeholder="Nome do fornecedor" aria-label="Nome do novo fornecedor" className={cn(campoCls, 'mt-2')} />}
+          {fornId === '_novo' && <input maxLength={LIMITE.nome} value={novoForn} onChange={(e) => setNovoForn(e.target.value)} placeholder="Nome do fornecedor" aria-label="Nome do novo fornecedor" className={cn(campoCls, 'mt-2')} />}
         </div>
         <div>
           <Rotulo htmlFor="nc-cat">Tipo de gasto</Rotulo>

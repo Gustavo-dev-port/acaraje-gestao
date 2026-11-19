@@ -8,6 +8,7 @@ import { dataBR, hojeIso, reais } from '@/lib/fmt'
 import { AppShell } from '@/ui/AppShell'
 import { Button } from '@/ui/Button'
 import { campoCls, CampoValor, Chip, Confirmacao, EstadoVazio, Janela, Rotulo } from '@/ui/kit'
+import { LIMITE } from '@/lib/validar'
 
 type Un = 'kg' | 'g' | 'l' | 'ml' | 'un'
 const UNIDADES: Un[] = ['kg', 'g', 'l', 'ml', 'un']
@@ -98,7 +99,7 @@ function Insumos({ ings, ultimo, podeEditar, recarregar }: { ings: Ing[]; ultimo
     if (edit?.id && edit.unit && un !== edit.unit && ultimo.has(edit.id)) return setErro(`Este insumo já tem preços em ${edit.unit}. Para trocar a unidade, cadastre um novo insumo.`)
     const payload = { name: nome.trim(), unit: un, active: ativo }
     const r = edit?.id ? await supabase.from('ingredients').update(payload).eq('id', edit.id) : await supabase.from('ingredients').insert({ ...payload, company_id: app.companyId })
-    if (r.error) return setErro(r.error.code === '23514' ? 'Este insumo já está em fichas ou tem preços: a unidade não pode mudar.' : 'Não consegui salvar.')
+    if (r.error) return setErro(r.error.code === '23514' ? 'Este insumo já está em fichas ou tem preços: a unidade não pode mudar.' : r.error.code === '23505' ? 'Já existe um insumo com esse nome.' : 'Não consegui salvar.')
     setEdit(null); toast.ok('Insumo salvo'); recarregar()
   }
   async function salvarPreco() {
@@ -135,7 +136,7 @@ function Insumos({ ings, ultimo, podeEditar, recarregar }: { ings: Ing[]; ultimo
       {edit && (
         <Janela titulo={edit.id ? 'Editar insumo' : 'Novo insumo'} onFechar={() => setEdit(null)} largura="30rem">
           <div className="space-y-5">
-            <div><Rotulo htmlFor="i-nome">Nome</Rotulo><input id="i-nome" value={nome} onChange={(e) => setNome(e.target.value)} className={cn(campoCls, 'mt-2')} /></div>
+            <div><Rotulo htmlFor="i-nome">Nome</Rotulo><input id="i-nome" maxLength={LIMITE.nome} value={nome} onChange={(e) => setNome(e.target.value)} className={cn(campoCls, 'mt-2')} /></div>
             <fieldset><legend className="text-rotulo font-semibold">Você compra em</legend><div className="mt-2 flex flex-wrap gap-2">{UNIDADES.map((u) => <Chip key={u} ativo={un === u} onClick={() => setUn(u)}>{u}</Chip>)}</div></fieldset>
             <label className="flex min-h-12 items-center gap-3 text-corpo font-semibold"><input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} className="size-6 accent-[var(--laranja)]" /> Insumo ativo</label>
             {erro && <p role="alert" className="text-legenda font-semibold text-erro">{erro}</p>}
@@ -226,7 +227,7 @@ function Lista({ prods, itens, ings, custoDe, podeEditar, recarregar }: {
       {edit && (
         <Janela titulo={edit.id ? 'Ficha técnica' : 'Nova ficha'} onFechar={() => setEdit(null)} largura="40rem">
           <div className="space-y-5">
-            <div><Rotulo htmlFor="fn">Nome do prato ou drink</Rotulo><input id="fn" value={edit.name ?? ''} disabled={!podeEditar} onChange={(e) => setEdit({ ...edit, name: e.target.value })} className={cn(campoCls, 'mt-2')} /></div>
+            <div><Rotulo htmlFor="fn">Nome do prato ou drink</Rotulo><input id="fn" maxLength={LIMITE.nome} value={edit.name ?? ''} disabled={!podeEditar} onChange={(e) => setEdit({ ...edit, name: e.target.value })} className={cn(campoCls, 'mt-2')} /></div>
             <fieldset><legend className="text-rotulo font-semibold">Tipo</legend><div className="mt-2 flex gap-2"><Chip ativo={edit.kind !== 'bar'} onClick={() => setEdit({ ...edit, kind: 'cozinha' })}>🍤 Cozinha</Chip><Chip ativo={edit.kind === 'bar'} onClick={() => setEdit({ ...edit, kind: 'bar' })}>🍹 Bar</Chip></div></fieldset>
             <div className="grid gap-4 sm:grid-cols-2">
               <div><Rotulo htmlFor="fv">Preço de venda</Rotulo><CampoValor id="fv" valor={venda} onChange={setVenda} disabled={!podeEditar} /></div>
@@ -254,7 +255,7 @@ function Lista({ prods, itens, ings, custoDe, podeEditar, recarregar }: {
               {sugerido != null && <p>Preço sugerido para CMV de {edit.target_cmv}%: <b className="numeros">{reais(sugerido)}</b></p>}
               {custo.faltam > 0 && <p className="font-semibold text-erro">Falta preço ou unidade compatível em {custo.faltam} ingrediente(s).</p>}
             </div>
-            <div><Rotulo htmlFor="fi">Modo de preparo (opcional)</Rotulo><textarea id="fi" rows={4} value={edit.instructions ?? ''} disabled={!podeEditar} onChange={(e) => setEdit({ ...edit, instructions: e.target.value })} className={cn(campoCls, 'mt-2 h-auto py-3')} /></div>
+            <div><Rotulo htmlFor="fi">Modo de preparo (opcional)</Rotulo><textarea id="fi" rows={4} maxLength={LIMITE.texto} value={edit.instructions ?? ''} disabled={!podeEditar} onChange={(e) => setEdit({ ...edit, instructions: e.target.value })} className={cn(campoCls, 'mt-2 h-auto py-3')} /></div>
             {erro && <p role="alert" className="text-legenda font-semibold text-erro">{erro}</p>}
             {podeEditar && <Button size="lg" className="w-full" onClick={salvar}>Salvar ficha</Button>}
           </div>

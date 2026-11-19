@@ -1,9 +1,19 @@
 import { createClient } from '@supabase/supabase-js'
 
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL as string,
-  import.meta.env.VITE_SUPABASE_KEY as string,
-)
+const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
+const key = import.meta.env.VITE_SUPABASE_KEY as string | undefined
+// Falha cedo e com mensagem clara, em vez de um app que "carrega" para sempre.
+if (!url || !key) throw new Error('Faltam VITE_SUPABASE_URL e VITE_SUPABASE_KEY (URL e chave PUBLICÁVEL do Supabase). Veja o README.')
+
+export const supabase = createClient(url, key, {
+  auth: {
+    // PKCE: o link do e-mail traz um código de uso único, e não o token da sessão na barra de endereço.
+    flowType: 'pkce',
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+})
 
 export type Role = 'dono' | 'socio' | 'confianca'
 

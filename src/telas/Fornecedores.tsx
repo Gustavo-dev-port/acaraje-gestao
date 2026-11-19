@@ -6,6 +6,7 @@ import { toast } from '@/lib/toast'
 import { nomeFornecedor, useApp } from '@/lib/ctx'
 import { mascararCnpj, reais } from '@/lib/fmt'
 import { buscarCnpj } from '@/lib/gastos'
+import { cnpjValido, LIMITE } from '@/lib/validar'
 import { todasLinhas } from '@/lib/paginar'
 import { AppShell } from '@/ui/AppShell'
 import { Button } from '@/ui/Button'
@@ -128,6 +129,7 @@ function FormForn({ inicial, companyId, onFechar, onSalvo }: { inicial: Partial<
   async function salvar() {
     setErro('')
     if (digitos && digitos.length !== 14) return setErro('O CNPJ precisa ter 14 números.')
+    if (digitos && !cnpjValido(digitos)) return setErro('Esse CNPJ não parece certo. Confira os números.')
     if (!apelido.trim() && !razao.trim()) return setErro('Dê um nome ao fornecedor.')
     setSalvando(true)
     const payload: Record<string, unknown> = {
@@ -158,8 +160,8 @@ function FormForn({ inicial, companyId, onFechar, onSalvo }: { inicial: Partial<
           </div>
           <p className="mt-1 text-legenda text-muted-foreground">Com os 14 números, a gente busca o nome e a situação na Receita.</p>
         </div>
-        <div><Rotulo htmlFor="f-ap">Nome de uso (como você chama)</Rotulo><input id="f-ap" value={apelido} onChange={(e) => setApelido(e.target.value)} className={cn(campoCls, 'mt-2')} /></div>
-        <div><Rotulo htmlFor="f-rz">Razão social (opcional)</Rotulo><input id="f-rz" value={razao} onChange={(e) => setRazao(e.target.value)} className={cn(campoCls, 'mt-2')} /></div>
+        <div><Rotulo htmlFor="f-ap">Nome de uso (como você chama)</Rotulo><input id="f-ap" maxLength={LIMITE.nome} value={apelido} onChange={(e) => setApelido(e.target.value)} className={cn(campoCls, 'mt-2')} /></div>
+        <div><Rotulo htmlFor="f-rz">Razão social (opcional)</Rotulo><input id="f-rz" maxLength={LIMITE.nome} value={razao} onChange={(e) => setRazao(e.target.value)} className={cn(campoCls, 'mt-2')} /></div>
         <div><Rotulo htmlFor="f-cat">Tipo de gasto usual (opcional)</Rotulo><SelectCategoria id="f-cat" valor={cat} onChange={setCat} className="mt-2" /></div>
         {erro && <p role="alert" className="text-legenda font-semibold text-erro">{erro}</p>}
         <div className="flex gap-3">

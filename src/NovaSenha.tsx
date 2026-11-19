@@ -3,6 +3,8 @@ import { supabase } from '@/supabase'
 import { Button } from '@/ui/Button'
 import { Logo } from '@/ui/Logo'
 import { Aviso, campoCls, Rotulo } from '@/ui/kit'
+import { limparRecuperacao } from '@/lib/recuperacao'
+import { SENHA_MIN, SENHA_MSG } from '@/lib/validar'
 
 // Tela mostrada depois que a pessoa abre o link de "esqueci minha senha" recebido por e-mail.
 export default function NovaSenha({ onConcluir }: { onConcluir: () => void }) {
@@ -14,12 +16,15 @@ export default function NovaSenha({ onConcluir }: { onConcluir: () => void }) {
   async function salvar(e: React.FormEvent) {
     e.preventDefault()
     setErro('')
-    if (senha.length < 8) return setErro('A senha precisa ter pelo menos 8 caracteres.')
+    if (senha.length < SENHA_MIN) return setErro(SENHA_MSG)
     if (senha !== repete) return setErro('As duas senhas não são iguais.')
     setBusy(true)
     const { error } = await supabase.auth.updateUser({ password: senha })
     setBusy(false)
     if (error) return setErro('Não consegui salvar a senha. Peça um novo link e tente de novo.')
+    // com a senha trocada, encerra as outras sessões abertas desta conta (se alguém mais estivesse logado, cai)
+    try { await supabase.auth.signOut({ scope: 'others' }) } catch { /* a senha já foi trocada; seguir */ }
+    limparRecuperacao()
     onConcluir()
   }
 
@@ -39,7 +44,7 @@ export default function NovaSenha({ onConcluir }: { onConcluir: () => void }) {
         </div>
         {erro && <Aviso tipo="erro" className="py-3">{erro}</Aviso>}
         <Button type="submit" size="lg" className="w-full" disabled={busy}>{busy ? 'Aguarde…' : 'Salvar nova senha'}</Button>
-        <button type="button" className="mx-auto block h-12 text-legenda font-semibold text-primary underline underline-offset-4" onClick={async () => { try { sessionStorage.removeItem('ca-recuperando') } catch { /* sem armazenamento */ } await supabase.auth.signOut(); onConcluir() }}>
+        <button type="button" className="mx-auto block h-12 text-legenda font-semibold text-primary underline underline-offset-4" onClick={async () => { limparRecuperacao(); await supabase.auth.signOut(); onConcluir() }}>
           Cancelar e sair
         </button>
       </form>

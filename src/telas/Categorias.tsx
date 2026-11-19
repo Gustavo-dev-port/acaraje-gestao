@@ -9,6 +9,7 @@ import { AppShell } from '@/ui/AppShell'
 import { Button } from '@/ui/Button'
 import { IconeCategoria } from '@/ui/icones'
 import { Aviso, campoCls, CampoValor, Chip, Janela, Rotulo, Selo } from '@/ui/kit'
+import { LIMITE } from '@/lib/validar'
 
 export default function Categorias() {
   const app = useApp()
@@ -83,10 +84,10 @@ function FormCat({ inicial, meta, onFechar, onSalvo }: { inicial: Partial<Cat>; 
     let id = inicial.id
     if (id) {
       const { error } = await supabase.from('categories').update(payload).eq('id', id)
-      if (error) { setSalvando(false); return setErro(error.code === '23514' ? 'Só há dois níveis: grupo e detalhe. Essa mudança não é possível.' : 'Não consegui salvar.') }
+      if (error) { setSalvando(false); return setErro(error.code === '23514' ? 'Só há dois níveis: grupo e detalhe. Essa mudança não é possível.' : error.code === '23505' ? 'Já existe uma categoria com esse nome nesse grupo.' : 'Não consegui salvar.') }
     } else {
       const { data, error } = await supabase.from('categories').insert({ ...payload, company_id: app.companyId, sort_order: app.cats.length, icon: '', color: '#6B6B6B' }).select('id').single()
-      if (error || !data) { setSalvando(false); return setErro('Não consegui salvar.') }
+      if (error || !data) { setSalvando(false); return setErro(error?.code === '23505' ? 'Já existe uma categoria com esse nome nesse grupo.' : 'Não consegui salvar.') }
       id = data.id as string
     }
     const meta = alvo > 0
@@ -101,7 +102,7 @@ function FormCat({ inicial, meta, onFechar, onSalvo }: { inicial: Partial<Cat>; 
   return (
     <Janela titulo={inicial.id ? 'Editar categoria' : ehGrupo ? 'Nova categoria' : 'Nova subcategoria'} onFechar={onFechar} lado largura="30rem">
       <div className="space-y-5">
-        <div><Rotulo htmlFor="c-nome">Nome</Rotulo><input id="c-nome" value={nome} onChange={(e) => setNome(e.target.value)} className={cn(campoCls, 'mt-2')} /></div>
+        <div><Rotulo htmlFor="c-nome">Nome</Rotulo><input id="c-nome" maxLength={LIMITE.nome} value={nome} onChange={(e) => setNome(e.target.value)} className={cn(campoCls, 'mt-2')} /></div>
         <div>
           <Rotulo htmlFor="c-pai">Fica dentro de</Rotulo>
           <select id="c-pai" value={pai} disabled={temFilhos} onChange={(e) => setPai(e.target.value)} className={cn(campoCls, 'mt-2')}>

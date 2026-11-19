@@ -40,14 +40,63 @@ export async function listarAnexos(expenseId: string): Promise<Anexo[]> {
   return (data as Anexo[]) ?? []
 }
 
+// Tipos aceitos: os mesmos que o bucket do Supabase aceita (imagem sem SVG, e PDF), até 10 MB.
+// A triagem aqui melhora a mensagem para a pessoa; quem barra de verdade é o banco.
+const TIPOS_POR_EXTENSAO: Record<string, string> = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif', pdf: 'application/pdf',
+}
+export const ANEXO_ACCEPT = '.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf'
+export const ANEXO_MAX_BYTES = 10 * 1024 * 1024
+export const ANEXO_MAX_QTD = 5
+
+const EXTENSAO_POR_TIPO: Record<string, string> = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heif', 'application/pdf': 'pdf',
+}
+
+const extensaoDe = (nome: string) => (nome.includes('.') ? nome.split('.').pop()! : '').toLowerCase().replace(/[^a-z0-9]/g, '')
+
+/**
+ * Tipo permitido do arquivo, ou null.
+ * Vale o tipo que o navegador informa, se for um dos aceitos (o iPhone, por exemplo, converte HEIC em JPEG mas mantém o
+ * nome .HEIC; alguns Androids mandam arquivo sem extensão). Sem tipo, vale a extensão. Imagem dizendo ser PDF (ou o
+ * contrário), SVG e qualquer outro tipo são recusados. A extensão guardada no servidor sai do tipo, não do nome.
+ */
+function tipoPermitido(f: File): string | null {
+  const porExt = TIPOS_POR_EXTENSAO[extensaoDe(f.name)]
+  let t = f.type.toLowerCase()
+  if (t === 'image/jpg') t = 'image/jpeg'
+  if (!t) return porExt ?? null
+  if (!(t in EXTENSAO_POR_TIPO)) return null
+  if (porExt && (t === 'application/pdf') !== (porExt === 'application/pdf')) return null
+  return t
+}
+
+/** Separa o que pode ser enviado do que não pode e diz o motivo, em palavras simples. */
+export function triarArquivos(arquivos: File[]): { aceitos: File[]; motivo: { titulo: string; dica: string } | null } {
+  const aceitos: File[] = []
+  let semTipo = 0, grandes = 0, demais = 0
+  for (const f of arquivos) {
+    if (!tipoPermitido(f)) semTipo++
+    else if (f.size > ANEXO_MAX_BYTES) grandes++
+    else if (aceitos.length >= ANEXO_MAX_QTD) demais++
+    else aceitos.push(f)
+  }
+  const motivo = semTipo ? { titulo: `${semTipo} arquivo(s) de tipo não aceito.`, dica: 'Envie foto (JPG, PNG, WEBP, HEIC) ou PDF.' }
+    : grandes ? { titulo: `${grandes} arquivo(s) grande(s) demais.`, dica: 'O limite é 10 MB por arquivo.' }
+    : demais ? { titulo: `Só ${ANEXO_MAX_QTD} arquivos por vez.`, dica: 'Os outros ficaram de fora.' }
+    : null
+  return { aceitos, motivo }
+}
+
 export async function enviarAnexo(companyId: string, expenseId: string, f: File): Promise<boolean> {
-  if (f.size > 10 * 1024 * 1024) return false
-  const ext = (f.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'bin'
+  const tipo = tipoPermitido(f)
+  if (!tipo || f.size > ANEXO_MAX_BYTES) return false
+  const ext = EXTENSAO_POR_TIPO[tipo]
   const d = new Date()
   const path = `${companyId}/${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${crypto.randomUUID()}.${ext}`
-  const up = await supabase.storage.from(BUCKET).upload(path, f, { contentType: f.type || undefined })
+  const up = await supabase.storage.from(BUCKET).upload(path, f, { contentType: tipo })
   if (up.error) return false
-  const ins = await supabase.from('attachments').insert({ company_id: companyId, expense_id: expenseId, path, kind: f.type === 'application/pdf' ? 'pdf' : 'image' })
+  const ins = await supabase.from('attachments').insert({ company_id: companyId, expense_id: expenseId, path, kind: tipo === 'application/pdf' ? 'pdf' : 'image' })
   if (ins.error) {
     // sem o registro no banco o arquivo ficaria órfão: remove o que acabou de subir
     await supabase.storage.from(BUCKET).remove([path])

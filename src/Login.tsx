@@ -3,6 +3,7 @@ import { supabase } from '@/supabase'
 import { Button } from '@/ui/Button'
 import { Logo } from '@/ui/Logo'
 import { Aviso, campoCls, Rotulo } from '@/ui/kit'
+import { LIMITE, SENHA_MIN, SENHA_MSG } from '@/lib/validar'
 
 // dica para o gerenciador de senhas do navegador
 const DICA_SENHA = { novo: 'new-password', atual: 'current-password' }
@@ -21,17 +22,18 @@ export default function Login() {
     setMsg(null)
     if (esqueci) {
       if (!email.trim()) { setBusy(false); return setMsg({ texto: 'Digite o seu e-mail.', tipo: 'erro' }) }
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin + '/' })
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin + window.location.pathname })
       // falha de verdade (limite de envios, sem internet): avisa. Conta que não existe responde igual a uma que existe, para não revelar quem tem acesso.
       if (error && (error.status === 429 || error.status === 0 || /rate|fetch|network/i.test(error.message))) setMsg({ texto: 'Não consegui enviar agora. Espere alguns minutos e tente de novo.', tipo: 'erro' })
-      else setMsg({ texto: 'Se este e-mail tem acesso, enviamos um link para criar uma nova senha. Confira também o spam.', tipo: 'ok' })
+      else setMsg({ texto: 'Se este e-mail tem acesso, enviamos um link para criar uma nova senha. Abra o link neste mesmo aparelho e navegador. Confira também o spam.', tipo: 'ok' })
     } else if (primeiro) {
-      if (senha.length < 8) {
+      if (senha.length < SENHA_MIN) {
         setBusy(false)
-        return setMsg({ texto: 'A senha precisa ter pelo menos 8 caracteres.', tipo: 'erro' })
+        return setMsg({ texto: SENHA_MSG, tipo: 'erro' })
       }
       const { data, error } = await supabase.auth.signUp({ email: email.trim(), password: senha })
-      if (error) setMsg({ texto: /convidado/i.test(error.message) ? 'Este e-mail não foi convidado. Peça ao dono.' : 'Não consegui criar o acesso.', tipo: 'erro' })
+      // Mensagem única de propósito: dizer "não foi convidado" revelaria quais e-mails têm convite.
+      if (error) setMsg({ texto: 'Não consegui criar o acesso. Confira o e-mail e a senha e peça ao dono para conferir o convite.', tipo: 'erro' })
       else if (!data.session) setMsg({ texto: 'Quase lá! Abra o e-mail que enviamos e confirme para poder entrar.', tipo: 'ok' })
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: senha })
@@ -54,7 +56,7 @@ export default function Login() {
         {primeiro && <p className="text-legenda text-muted-foreground">Use o e-mail que o dono convidou e crie uma senha.</p>}
         <div>
           <Rotulo htmlFor="email">E-mail</Rotulo>
-          <input id="email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} className={`${campoCls} mt-2`} />
+          <input id="email" type="email" autoComplete="username" required maxLength={LIMITE.email} value={email} onChange={(e) => setEmail(e.target.value)} className={`${campoCls} mt-2`} />
         </div>
         {!esqueci && <div>
           <Rotulo htmlFor="senha">{primeiro ? 'Crie uma senha' : 'Senha'}</Rotulo>

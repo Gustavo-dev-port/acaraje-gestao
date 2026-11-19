@@ -4,9 +4,10 @@ import { supabase } from '@/supabase'
 import { cn } from '@/lib/cn'
 import { toast } from '@/lib/toast'
 import { nomeFornecedor, useApp } from '@/lib/ctx'
-import { abrirAnexo, enviarAnexo, FORMAS, listarAnexos, removerAnexo, rotuloForma, type Anexo, type Gasto } from '@/lib/gastos'
+import { abrirAnexo, ANEXO_ACCEPT, enviarAnexo, FORMAS, listarAnexos, removerAnexo, rotuloForma, triarArquivos, type Anexo, type Gasto } from '@/lib/gastos'
 import { Button } from '@/ui/Button'
 import { campoCls, CampoValor, Chip, Janela, Rotulo } from '@/ui/kit'
+import { LIMITE } from '@/lib/validar'
 
 /** Seletor de categoria: grupo → detalhe, como <select> agrupado. */
 export function SelectCategoria({ id, valor, onChange, className }: { id?: string; valor: string; onChange: (v: string) => void; className?: string }) {
@@ -115,11 +116,11 @@ export default function GastoEditor({ gasto, titulo = 'Editar gasto', onFechar, 
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
             <Rotulo htmlFor="ed-nota">Número da nota</Rotulo>
-            <input id="ed-nota" value={nota} onChange={(e) => setNota(e.target.value)} className={cn(campoCls, 'mt-2')} />
+            <input id="ed-nota" maxLength={LIMITE.nota} value={nota} onChange={(e) => setNota(e.target.value)} className={cn(campoCls, 'mt-2')} />
           </div>
           <div>
             <Rotulo htmlFor="ed-obs">Observação</Rotulo>
-            <input id="ed-obs" value={obs} onChange={(e) => setObs(e.target.value)} className={cn(campoCls, 'mt-2')} />
+            <input id="ed-obs" maxLength={LIMITE.observacao} value={obs} onChange={(e) => setObs(e.target.value)} className={cn(campoCls, 'mt-2')} />
           </div>
         </div>
         <div>
@@ -137,7 +138,7 @@ export default function GastoEditor({ gasto, titulo = 'Editar gasto', onFechar, 
             </ul>
           )}
           <div className="mt-2">
-            <input ref={refFoto} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => setNovos(Array.from(e.target.files ?? []))} />
+            <input ref={refFoto} type="file" accept={ANEXO_ACCEPT} multiple className="hidden" onChange={(e) => { const r = triarArquivos(Array.from(e.target.files ?? [])); if (r.aceitos.length || !r.motivo) setNovos(r.aceitos); if (r.motivo) toast.erro(r.motivo.titulo, r.motivo.dica); e.target.value = '' }} />
             <Button variant="outline" onClick={() => refFoto.current?.click()}><Camera /> Adicionar arquivo</Button>
             {novos.length > 0 && <span className="ml-3 text-legenda text-muted-foreground">{novos.length} para enviar ao salvar</span>}
           </div>

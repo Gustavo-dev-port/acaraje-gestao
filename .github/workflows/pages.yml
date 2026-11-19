@@ -3,10 +3,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+# Permissão mínima para tudo; só a publicação recebe pages/id-token (veja o job "deploy").
 permissions:
   contents: read
-  pages: write
-  id-token: write
 concurrency:
   group: pages
   cancel-in-progress: true
@@ -20,6 +19,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # Barra a publicação se houver vulnerabilidade alta ou crítica nas dependências de produção.
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
@@ -30,6 +31,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

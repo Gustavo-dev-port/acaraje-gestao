@@ -6,7 +6,8 @@ import { Link, navigate } from '@/lib/router'
 import { toast } from '@/lib/toast'
 import { nomeFornecedor, useApp, type Sup } from '@/lib/ctx'
 import { dataBR, dataCurta, hojeIso, mascararCnpj, mesDe, ontemIso, reais } from '@/lib/fmt'
-import { buscarCnpj, enviarAnexo, FORMAS, GASTO_SEL, rotuloForma, type DadosCnpj, type Gasto } from '@/lib/gastos'
+import { cnpjValido, LIMITE } from '@/lib/validar'
+import { ANEXO_ACCEPT, buscarCnpj, enviarAnexo, FORMAS, GASTO_SEL, rotuloForma, triarArquivos, type DadosCnpj, type Gasto } from '@/lib/gastos'
 import { AppShell } from '@/ui/AppShell'
 import { Button } from '@/ui/Button'
 import { IconeCategoria } from '@/ui/icones'
@@ -53,6 +54,8 @@ export default function LancarGasto() {
 
   const digitos = texto.replace(/\D/g, '')
   const pareceCnpj = digitos.length >= 8 && /^[\d./\-\s]+$/.test(texto)
+  // 14 números com dígito verificador errado: provável erro de digitação; não vai para a Receita
+  const cnpjErrado = pareceCnpj && digitos.length === 14 && !cnpjValido(digitos)
 
   const sugestoes = useMemo(() => {
     const t = texto.trim().toLowerCase()
@@ -68,7 +71,7 @@ export default function LancarGasto() {
 
   // busca do CNPJ na Receita (14 dígitos) quando ainda não está cadastrado
   useEffect(() => {
-    if (forn || digitos.length !== 14 || sups.some((f) => (f.cnpj ?? '').replace(/\D/g, '') === digitos)) { setBusca('idle'); setAchado(null); return }
+    if (forn || digitos.length !== 14 || !cnpjValido(digitos) || sups.some((f) => (f.cnpj ?? '').replace(/\D/g, '') === digitos)) { setBusca('idle'); setAchado(null); return }
     let vivo = true
     setBusca('buscando')
     buscarCnpj(digitos).then((d) => { if (!vivo) return; if (d) { setAchado(d); setBusca('encontrado') } else setBusca('offline') })
@@ -255,6 +258,7 @@ export default function LancarGasto() {
                   <CheckCircle2 className="size-5 text-folha" aria-hidden /><b>{nomeFornecedor(forn)}</b>
                 </p>
               )}
+              {cnpjErrado && !forn && <Aviso tipo="atencao" className="mt-2 py-3">Esse CNPJ não parece certo. Confira os números.</Aviso>}
               {busca === 'buscando' && <p className="mt-2 flex items-center gap-2 text-legenda text-muted-foreground"><Loader2 className="size-5 animate-spin" aria-hidden /> Buscando CNPJ na Receita…</p>}
               {busca === 'encontrado' && achado && (
                 <Aviso tipo="ok" className="mt-2 py-3" acao={<Button variant="sucesso" onClick={usarAchado}>Usar este</Button>}>
@@ -317,7 +321,7 @@ export default function LancarGasto() {
                 </fieldset>
                 <div>
                   <Rotulo htmlFor="nota">Número da nota</Rotulo>
-                  <input id="nota" value={nota} onChange={(e) => setNota(e.target.value)} className={cn(campoCls, 'mt-2')} />
+                  <input id="nota" maxLength={LIMITE.nota} value={nota} onChange={(e) => setNota(e.target.value)} className={cn(campoCls, 'mt-2')} />
                 </div>
                 <div>
                   <Rotulo htmlFor="venc">Vencimento</Rotulo>
@@ -325,7 +329,7 @@ export default function LancarGasto() {
                   <p className="mt-1 text-legenda text-muted-foreground">Preencha só se ainda não pagou: vai para “Contas do mês”.</p>
                 </div>
                 <div className="sm:col-span-2">
-                  <input ref={refFoto} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => setFotos(Array.from(e.target.files ?? []))} />
+                  <input ref={refFoto} type="file" accept={ANEXO_ACCEPT} multiple className="hidden" onChange={(e) => { const r = triarArquivos(Array.from(e.target.files ?? [])); if (r.aceitos.length || !r.motivo) setFotos(r.aceitos); if (r.motivo) toast.erro(r.motivo.titulo, r.motivo.dica); e.target.value = '' }} />
                   <Button variant="outline" onClick={() => refFoto.current?.click()}><Camera /> {fotos.length ? 'Trocar foto ou PDF da nota' : 'Anexar foto ou PDF da nota'}</Button>
                   {fotos.length > 0 && <span className="ml-3 text-legenda text-muted-foreground">{fotos.length} arquivo(s)</span>}
                 </div>

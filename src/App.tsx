@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, type Role } from '@/supabase'
 import { AppProvider } from '@/lib/ctx'
+import { limparRecuperacao, marcarRecuperacao, recuperacaoPendente } from '@/lib/recuperacao'
 import { usePath } from '@/lib/router'
 import { Toaster } from '@/lib/toast'
 import { Button } from '@/ui/Button'
@@ -39,17 +40,24 @@ export default function App() {
   const [pronto, setPronto] = useState(false)
   const [vinculo, setVinculo] = useState<Vinculo | null>(null)
   const [semVinculo, setSemVinculo] = useState(false)
-  const [recuperando, setRecuperando] = useState(() => {
-    // chegou pelo link de "esqueci a senha" (lido já na abertura da página e guardado, para sobreviver a recarregar)
-    try {
-      if (/type=recovery/.test(window.location.hash)) sessionStorage.setItem('ca-recuperando', '1')
-      return sessionStorage.getItem('ca-recuperando') === '1'
-    } catch { return /type=recovery/.test(window.location.hash) }
-  })
+  // Chegou pelo link de "esqueci a senha"? O supabase-js troca o código do link por uma sessão e avisa com o evento
+  // PASSWORD_RECOVERY (antes de getSession responder). A marca fica guardada até a senha ser trocada ou a pessoa sair.
+  const [recuperando, setRecuperando] = useState(recuperacaoPendente)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setPronto(true) })
-    const { data } = supabase.auth.onAuthStateChange((e, s) => { setSession(s); if (e === 'PASSWORD_RECOVERY') setRecuperando(true) })
+    supabase.auth.getSession()
+      .then(({ data }) => setSession(data.session))
+      .catch(() => setSession(null)) // sem internet na abertura: mostra o login em vez de ficar em "Carregando…" para sempre
+      .finally(() => setPronto(true))
+    const { data } = supabase.auth.onAuthStateChange((e, s) => {
+      setSession(s)
+      if (e === 'PASSWORD_RECOVERY') { marcarRecuperacao(); setRecuperando(true) }
+      if (e === 'SIGNED_OUT') {
+        // a próxima pessoa neste aparelho não herda a última tela nem a marca de recuperação
+        limparRecuperacao(); setRecuperando(false)
+        try { window.history.replaceState(null, '', window.location.pathname + window.location.search) } catch { /* sem history */ }
+      }
+    })
     return () => data.subscription.unsubscribe()
   }, [])
 
@@ -73,7 +81,7 @@ export default function App() {
   let corpo
   if (!pronto) corpo = <div className="flex min-h-screen items-center justify-center text-corpo text-muted-foreground">Carregando…</div>
   else if (!session) corpo = <Login />
-  else if (recuperando) corpo = <NovaSenha onConcluir={() => { try { sessionStorage.removeItem('ca-recuperando') } catch { /* sem armazenamento */ } setRecuperando(false) }} />
+  else if (recuperando) corpo = <NovaSenha onConcluir={() => { limparRecuperacao(); setRecuperando(false) }} />
   else if (semVinculo) {
     corpo = (
       <div className="flex min-h-screen flex-col items-center justify-center gap-5 px-4 text-center">

@@ -100,4 +100,4 @@ O rascunho antigo `20261112000000_gestao_core.sql` foi removido em 19/11/2026, p
 - Índices de chaves estrangeiras e unificação de regras repetidas (desempenho, só importa com muito dado).
 - Testes automáticos das regras por cargo.
 - Confirmar vários gastos de uma vez: a correção (`set_expenses_status`) está escrita, mas ainda não foi aplicada no banco.
-- Telas "Importar extrato" e "Estoque" ainda aparecem como "Em breve".
+- A tela "Estoque" usa `stock_movements`, `stock_balance` e `record_stock_counts` (migration `estoque`, aplicada no banco): todos veem o saldo e lançam entrada, saída e perda; só dono e sócio fazem contagem (ajuste) e definem o mínimo.

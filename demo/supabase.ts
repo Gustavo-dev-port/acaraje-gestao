@@ -67,6 +67,16 @@ const DB: Record<string, Record<string, unknown>[]> = {
   ingredient_prices: [{ ingredient_id: 'g1', date: iso(2), unit_cost_cents: 9000 }, { ingredient_id: 'g2', date: iso(2), unit_cost_cents: 1000 }, { ingredient_id: 'g3', date: iso(2), unit_cost_cents: 2500 }],
   products: [{ id: 'f1', name: 'Acarajé completo', kind: 'cozinha', menu_category: 'Acarajés', sale_price_cents: 1800, target_cmv: 30, instructions: null, version: 1, active: true }],
   recipe_items: [{ product_id: 'f1', ingredient_id: 'g1', quantity: 30, unit: 'g' }, { product_id: 'f1', ingredient_id: 'g2', quantity: 80, unit: 'g' }, { product_id: 'f1', ingredient_id: 'g3', quantity: 20, unit: 'ml' }],
+  stock_balance: [
+    { ingredient_id: 'g1', name: 'Camarão seco', unit: 'kg', active: true, min_stock: 2, balance: 1.5, last_movement: iso(1), below_min: true, stock_value_cents: 13500 },
+    { ingredient_id: 'g2', name: 'Feijão-fradinho', unit: 'kg', active: true, min_stock: 5, balance: 12, last_movement: iso(3), below_min: false, stock_value_cents: 12000 },
+    { ingredient_id: 'g3', name: 'Azeite de dendê', unit: 'l', active: true, min_stock: null, balance: -0.5, last_movement: iso(2), below_min: false, stock_value_cents: 0 },
+  ],
+  stock_movements: [
+    { id: 'm1', kind: 'Entrada', delta: 5, occurred_on: iso(6), notes: 'Compra semanal' },
+    { id: 'm2', kind: 'Saida', delta: -3, occurred_on: iso(3), notes: null },
+    { id: 'm3', kind: 'Perda', delta: -0.5, occurred_on: iso(1), notes: 'Venceu' },
+  ],
   attachments: [],
 }
 

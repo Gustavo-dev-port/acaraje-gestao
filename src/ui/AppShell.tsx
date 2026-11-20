@@ -23,12 +23,12 @@ const ITENS: Item[] = [
   { to: '/fornecedores', rotulo: 'Fornecedores', icone: Store },
   { to: '/categorias', rotulo: 'Categorias', icone: FolderTree, roles: ['dono', 'socio'] },
   { to: '/fichas', rotulo: 'Ficha técnica', icone: BookOpen },
+  { to: '/estoque', rotulo: 'Estoque', icone: Wheat },
   { to: '/equipe', rotulo: 'Equipe', icone: Users, roles: ['dono'] },
   { to: '/configuracoes', rotulo: 'Configurações', icone: Settings },
 ]
 
 const EM_BREVE: { rotulo: string; icone: LucideIcon }[] = [
-  { rotulo: 'Estoque', icone: Wheat },
 ]
 
 export function SeloEmBreve({ className }: { className?: string }) {
@@ -66,17 +66,21 @@ function Menu_({ aoEscolher }: { aoEscolher?: () => void }) {
             )
           })}
         </ul>
-        <p className="mt-4 px-5 pb-1 text-legenda text-sidebar-foreground/70">Próxima versão</p>
-        <ul aria-label="Módulos em breve">
-          {EM_BREVE.map((it) => {
-            const I = it.icone
-            return (
-              <li key={it.rotulo} aria-disabled className="flex min-h-11 items-center gap-3 px-5 text-lg text-sidebar-foreground/55">
-                <I className="size-6 shrink-0" aria-hidden /><span className="flex-1">{it.rotulo}</span><SeloEmBreve />
-              </li>
-            )
-          })}
-        </ul>
+        {EM_BREVE.length > 0 && (
+          <>
+            <p className="mt-4 px-5 pb-1 text-legenda text-sidebar-foreground/70">Próxima versão</p>
+            <ul aria-label="Módulos em breve">
+              {EM_BREVE.map((it) => {
+                const I = it.icone
+                return (
+                  <li key={it.rotulo} aria-disabled className="flex min-h-11 items-center gap-3 px-5 text-lg text-sidebar-foreground/55">
+                    <I className="size-6 shrink-0" aria-hidden /><span className="flex-1">{it.rotulo}</span><SeloEmBreve />
+                  </li>
+                )
+              })}
+            </ul>
+          </>
+        )}
       </nav>
       <div className="border-t border-sidebar-border px-5 py-3">
         <p className="flex items-center gap-2 text-legenda font-semibold text-[oklch(0.78_0.1_160)]"><Check className="size-5" aria-hidden /> Salvo na nuvem</p>

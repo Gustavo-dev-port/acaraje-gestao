@@ -13,6 +13,7 @@ import LancarGasto from './telas/LancarGasto'
 import Lancamentos from './telas/Lancamentos'
 import Contas from './telas/Contas'
 import Faturamento from './telas/Faturamento'
+import Importar from './telas/Importar'
 import Relatorios from './telas/Relatorios'
 import Dashboard from './telas/Dashboard'
 import Fornecedores from './telas/Fornecedores'
@@ -24,7 +25,7 @@ import Configuracoes from './telas/Configuracoes'
 interface Vinculo { companyId: string; companyName: string; role: Role }
 
 const ROTAS: Record<string, () => JSX.Element> = {
-  '/': LancarGasto, '/lancamentos': Lancamentos, '/contas': Contas, '/faturamento': Faturamento,
+  '/': LancarGasto, '/lancamentos': Lancamentos, '/contas': Contas, '/faturamento': Faturamento, '/importar': Importar,
   '/relatorios': Relatorios, '/dashboard': Dashboard, '/fornecedores': Fornecedores,
   '/categorias': Categorias, '/fichas': Fichas, '/equipe': Equipe, '/configuracoes': Configuracoes,
 }

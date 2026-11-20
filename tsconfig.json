@@ -10,6 +10,8 @@
     "noUnusedParameters": true,
     "skipLibCheck": true,
     "isolatedModules": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": { "@/*": ["src/*"] }

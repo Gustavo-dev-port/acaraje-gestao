@@ -17,6 +17,7 @@ const ITENS: Item[] = [
   { to: '/lancamentos', rotulo: 'Lançamentos', icone: ClipboardList },
   { to: '/contas', rotulo: 'Contas do mês', icone: CalendarCheck },
   { to: '/faturamento', rotulo: 'Faturamento', icone: Banknote },
+  { to: '/importar', rotulo: 'Importar extrato', icone: Upload },
   { to: '/relatorios', rotulo: 'Relatórios', icone: FileText },
   { to: '/dashboard', rotulo: 'Dashboard', icone: BarChart3 },
   { to: '/fornecedores', rotulo: 'Fornecedores', icone: Store },
@@ -27,7 +28,6 @@ const ITENS: Item[] = [
 ]
 
 const EM_BREVE: { rotulo: string; icone: LucideIcon }[] = [
-  { rotulo: 'Importar extrato', icone: Upload },
   { rotulo: 'Estoque', icone: Wheat },
 ]
 
